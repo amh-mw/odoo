@@ -40,6 +40,15 @@ def get_weekday_occurence(date):
     return occurence_in_month
 
 
+def ics_datetime(idate, allday=False):
+    if idate:
+        if allday:
+            return idate
+        else:
+            return idate.replace(tzinfo=pytz.timezone('UTC'))
+    return False
+
+
 class Meeting(models.Model):
     _name = 'calendar.event'
     _description = "Calendar Event"
@@ -402,26 +411,33 @@ class Meeting(models.Model):
         """
         result = {}
 
-        def ics_datetime(idate, allday=False):
-            if idate:
-                if allday:
-                    return idate
-                return idate.replace(tzinfo=pytz.timezone('UTC'))
-            return False
-
         try:
-            # FIXME: why isn't this in CalDAV?
             import vobject
         except ImportError:
             _logger.warning("The `vobject` Python module is not installed, so iCal file generation is unavailable. Please install the `vobject` Python module")
             return result
 
         for meeting in self:
-            cal = vobject.iCalendar()
-            event = cal.add('vevent')
+            result[meeting.id] = meeting.ics()
 
+        return result
+
+    def ics(self):
+        """ Returns serialized iCalendar file containing the events. """
+        try:
+            import vobject
+            cal = vobject.iCalendar()
+            self._vevents(cal)
+            return cal.serialize().encode('utf-8')
+        except ImportError:
+            _logger.warning("The `vobject` Python module is not installed, so iCal file generation is unavailable. Please install the `vobject` Python module")
+
+    def _vevents(self, cal):
+        for meeting in self:
             if not meeting.start or not meeting.stop:
                 raise UserError(_("First you have to specify the date of the invitation."))
+
+            event = cal.add('vevent')
             event.add('created').value = ics_datetime(fields.Datetime.now())
             event.add('dtstart').value = ics_datetime(meeting.start, meeting.allday)
             event.add('dtend').value = ics_datetime(meeting.stop, meeting.allday)
@@ -451,9 +467,6 @@ class Meeting(models.Model):
             for attendee in meeting.attendee_ids:
                 attendee_add = event.add('attendee')
                 attendee_add.value = u'MAILTO:' + (attendee.email or u'')
-            result[meeting.id] = cal.serialize().encode('utf-8')
-
-        return result
 
     def _attendees_values(self, partner_commands):
         """
