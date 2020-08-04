@@ -3521,8 +3521,8 @@ Fields:
 
         bad_names = {'id', 'parent_path'}
         if self._log_access:
-            # the superuser can set log_access fields while loading registry
-            if not(self.env.uid == SUPERUSER_ID and not self.pool.ready):
+            # the superuser can set log_access fields
+            if not(self.env.uid == SUPERUSER_ID):
                 bad_names.update(LOG_ACCESS_COLUMNS)
 
         determine_inverses = defaultdict(list)      # {inverse: fields}
@@ -3724,8 +3724,8 @@ Fields:
 
         bad_names = {'id', 'parent_path'}
         if self._log_access:
-            # the superuser can set log_access fields while loading registry
-            if not(self.env.uid == SUPERUSER_ID and not self.pool.ready):
+            # the superuser can set log_access fields
+            if not(self.env.uid == SUPERUSER_ID):
                 bad_names.update(LOG_ACCESS_COLUMNS)
 
         # classify fields for each record
