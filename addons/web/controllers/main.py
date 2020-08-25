@@ -925,6 +925,13 @@ class Home(http.Controller):
 
         return http.local_redirect(self._login_redirect(uid), keep_hash=True)
 
+    @http.route('/web/health', type='http', auth='none')
+    def health(self):
+        headers = [('Content-Type', 'application/health+json'),
+                   ('Cache-Control', 'no-store')]
+        return request.make_response('{"status": "pass"}', headers)
+
+
 class WebClient(http.Controller):
 
     @http.route('/web/webclient/csslist', type='json', auth="none")

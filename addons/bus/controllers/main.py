@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from odoo import exceptions, _
 from odoo.http import Controller, request, route
@@ -42,3 +42,9 @@ class BusController(Controller):
     @route('/longpolling/im_status', type="json", auth="user")
     def im_status(self, partner_ids):
         return request.env['res.partner'].search_read([['id', 'in', partner_ids]], ['id', 'im_status'])
+
+    @route('/longpolling/health', type='http', auth='none')
+    def health(self):
+        headers = [('Content-Type', 'application/health+json'),
+                   ('Cache-Control', 'no-store')]
+        return request.make_response('{"status": "pass"}', headers)
