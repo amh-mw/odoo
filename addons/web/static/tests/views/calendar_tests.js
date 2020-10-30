@@ -2,15 +2,18 @@ odoo.define('web.calendar_tests', function (require) {
 "use strict";
 
 var AbstractStorageService = require('web.AbstractStorageService');
+const BasicModel = require('web.BasicModel');
 var CalendarView = require('web.CalendarView');
 var CalendarRenderer = require('web.CalendarRenderer');
 var Dialog = require('web.Dialog');
+const fieldRegistry = require('web.field_registry');
 var ViewDialogs = require('web.view_dialogs');
 var fieldUtils = require('web.field_utils');
 var mixins = require('web.mixins');
 var RamStorage = require('web.RamStorage');
 var testUtils = require('web.test_utils');
 var session = require('web.session');
+const Widget = require('web.Widget');
 
 var createActionManager = testUtils.createActionManager;
 
@@ -331,7 +334,7 @@ QUnit.module('Views', {
     });
 
     QUnit.test('create and change events', async function (assert) {
-        assert.expect(26);
+        assert.expect(28);
 
         var calendar = await createCalendarView({
             View: CalendarView,
@@ -458,6 +461,14 @@ QUnit.module('Views', {
         assert.ok($newevent2.length, "should display the 2 days new record");
         assert.hasAttrValue($newevent2.closest('.fc-event-container'),
             'colspan', "2","the new record should have 2 days");
+
+        await testUtils.dom.click(calendar.$('.fc-event:contains(new event in quick create 2) .fc-content'));
+        var $popover_description = calendar.$('.o_cw_popover .o_cw_body .list-group-item');
+        assert.strictEqual($popover_description.children()[1].textContent,'December 20-21, 2016',
+            "The popover description should indicate the correct range");
+        assert.strictEqual($popover_description.children()[2].textContent,'(2 days)',
+            "The popover description should indicate 2 days");
+        await testUtils.dom.click(calendar.$('.o_cw_popover .fa-close'));
 
         // delete the a record
 
@@ -910,6 +921,83 @@ QUnit.module('Views', {
         assert.containsNone(calendar, '.o_cw_popover', "should close a popover");
 
         calendar.destroy();
+    });
+
+    QUnit.test('render popover with modifiers', async function (assert) {
+        assert.expect(3);
+
+        this.data.event.fields.priority = {string: "Priority", type: "selection", selection: [['0', 'Normal'], ['1', 'Important']],};
+
+        var calendar = await createCalendarView({
+            View: CalendarView,
+            model: 'event',
+            data: this.data,
+            arch:
+            '<calendar class="o_calendar_test" '+
+                'date_start="start" '+
+                'date_stop="stop" '+
+                'all_day="allday" '+
+                'mode="week">'+
+                '<field name="priority" widget="priority" readonly="1"/>'+
+            '</calendar>',
+            archs: archs,
+            viewOptions: {
+                initialDate: initialDate,
+            },
+        });
+
+        await testUtils.dom.click($('.fc-event:contains(event 4)'));
+
+        assert.containsOnce(calendar, '.o_cw_popover', "should open a popover clicking on event");
+        assert.containsOnce(calendar, '.o_cw_popover .o_priority span.o_priority_star', "priority field should not be editable");
+
+        await testUtils.dom.click($('.o_cw_popover .o_cw_popover_close'));
+        assert.containsNone(calendar, '.o_cw_popover', "should close a popover");
+
+        calendar.destroy();
+    });
+
+    QUnit.test('render popover with widget which has specialData attribute', async function (assert) {
+        assert.expect(3);
+
+        await testUtils.mock.patch(BasicModel, {
+            _fetchSpecialDataForMyWidget() {
+                assert.step("_fetchSpecialDataForMyWidget");
+                return Promise.resolve();
+            },
+        });
+
+        const MyWidget = Widget.extend({
+            specialData: "_fetchSpecialDataForMyWidget",
+        });
+
+        fieldRegistry.add('specialWidget', MyWidget);
+
+        const calendar = await createCalendarView({
+            View: CalendarView,
+            model: 'event',
+            data: this.data,
+            arch: `<calendar class="o_calendar_test"
+                    date_start="start"
+                    date_stop="stop"
+                    all_day="allday"
+                    mode="week">
+                        <field name="name" string="Custom Name" widget="specialWidget"/>
+                        <field name="partner_id"/>
+                </calendar>`,
+            archs,
+            viewOptions: {
+                initialDate,
+            },
+        });
+
+        const event4 = document.querySelectorAll(".fc-event")[0];
+        await testUtils.dom.click(event4);
+        assert.containsOnce(calendar, '.o_cw_popover', "should open a popover clicking on event");
+        assert.verifySteps(["_fetchSpecialDataForMyWidget"]);
+
+        calendar.destroy();
+        await testUtils.mock.unpatch(BasicModel);
     });
 
     QUnit.test('attributes hide_date and hide_time', async function (assert) {

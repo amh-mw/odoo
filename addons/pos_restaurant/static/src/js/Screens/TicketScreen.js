@@ -20,10 +20,16 @@ odoo.define('pos_restaurant.TicketScreen', function (require) {
                 }
             }
             get filterOptions() {
-                return [...super.filterOptions, 'Tipping'];
+                var filterOptions = super.filterOptions;
+                if (this.env.pos.config.set_tip_after_payment) {
+                    var idx = filterOptions.indexOf('Payment');
+                    filterOptions[idx] = 'Open';
+                }
+                return [...filterOptions, 'Tipping'];
             }
             get _screenToStatusMap() {
                 return Object.assign(super._screenToStatusMap, {
+                    PaymentScreen: this.env.pos.config.set_tip_after_payment ? 'Open' : super._screenToStatusMap.PaymentScreen,
                     TipScreen: 'Tipping',
                 });
             }
@@ -73,6 +79,13 @@ odoo.define('pos_restaurant.TicketScreen', function (require) {
             }
             async setTip(order, serverId, amount) {
                 try {
+                    const paymentline = order.get_paymentlines()[0];
+                    if (paymentline.payment_method.payment_terminal) {
+                        paymentline.amount += amount;
+                        this.env.pos.set_order(order, {silent: true});
+                        await paymentline.payment_method.payment_terminal.send_payment_adjust(paymentline.cid);
+                    }
+
                     if (!amount) {
                         await this.setNoTip();
                     } else {

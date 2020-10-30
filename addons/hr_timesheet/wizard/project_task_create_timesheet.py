@@ -23,10 +23,13 @@ class ProjectTaskCreateTimesheet(models.TransientModel):
         values = {
             'task_id': self.task_id.id,
             'project_id': self.task_id.project_id.id,
-            'date': datetime.now(),
+            'date': fields.Date.context_today(self),
             'name': self.description,
             'user_id': self.env.uid,
             'unit_amount': self.time_spent,
         }
         self.task_id.user_timer_id.unlink()
         return self.env['account.analytic.line'].create(values)
+
+    def action_delete_timesheet(self):
+        self.task_id.user_timer_id.unlink()

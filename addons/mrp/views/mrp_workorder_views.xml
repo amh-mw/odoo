@@ -14,6 +14,10 @@
                 <filter string="Late" name="late" domain="[('date_planned_start','&lt;=',time.strftime('%%Y-%%m-%%d'))]"/>
                 <separator/>
                 <filter string="Start Date" name="date_start_filter" date="date_start"/>
+                <group expand="0" string="Group By...">
+                    <filter string="Work center" name="workcenter" domain="[]" context="{'group_by': 'workcenter_id'}"/>
+                    <filter string="Product" name="product" domain="[]" context="{'group_by': 'product_id'}"/>
+                </group>
             </search>
         </field>
     </record>
@@ -43,12 +47,11 @@
         <field name="domain">[('production_id', '=', active_id)]</field>
         <field name="help" type="html">
           <p class="o_view_nocontent_smiling_face">
-            Start a new work order
+            No work orders to do!
           </p><p>
-            Work Orders are operations to be processed at a Work Center to realize a
-            Manufacturing Order. Work Orders are trigerred by Manufacturing Orders,
-            they are based on the Routing defined on these ones
-            </p>
+            Work orders are operations to do as part of a manufacturing order.
+            Operations are defined in the bill of materials or added in the manufacturing order directly.
+          </p>
         </field>
     </record>
 
@@ -161,7 +164,7 @@
                 <page string="Time Tracking" name="time_tracking" groups="mrp.group_mrp_manager">
                     <group>
                         <field name="time_ids" nolabel="1" context="{'default_workcenter_id': workcenter_id, 'default_workorder_id': id}">
-                            <tree>
+                            <tree editable="bottom">
                                 <field name="date_start"/>
                                 <field name="date_end"/>
                                 <field name="duration" widget="float_time" sum="Total duration"/>
@@ -258,9 +261,11 @@
         <field name="name">mrp.production.work.order.graph</field>
         <field name="model">mrp.workorder</field>
         <field name="arch" type="xml">
-            <graph string="Operations" sample="1">
+            <graph string="Operations" type="bar" stacked="False" sample="1">
                 <field name="production_id"/>
-                <field name="duration" type="measure"/>
+                <field name="duration" type="measure" string="Duration (minutes)"/>
+                <field name="duration_unit" type="measure"/>
+                <field name="duration_expected" type="measure"/>
             </graph>
         </field>
     </record>
@@ -272,7 +277,8 @@
             <pivot string="Operations" sample="1">
                 <field name="date_start"/>
                 <field name="operation_id"/>
-                <field name="duration" type="measure"/>
+                <field name="duration" type="measure" string="Duration (minutes)"/>
+                <field name="duration_unit" type="measure"/>
                 <field name="duration_expected" type="measure"/>
             </pivot>
         </field>
@@ -413,12 +419,11 @@
         <field name="context">{'search_default_work_center': True, 'search_default_ready': True, 'search_default_progress': True, 'search_default_pending': True}</field>
         <field name="help" type="html">
           <p class="o_view_nocontent_smiling_face">
-            Start a new work order
+            No work orders to do!
           </p><p>
-            Work Orders are operations to be processed at a Work Center to realize a
-            Manufacturing Order. Work Orders are trigerred by Manufacturing Orders,
-            they are based on the Routing defined on these ones
-            </p>
+            Work orders are operations to do as part of a manufacturing order.
+            Operations are defined in the bill of materials or added in the manufacturing order directly.
+          </p>
         </field>
     </record>
 
@@ -433,13 +438,10 @@
         <field name="context">{'search_default_production': True, 'search_default_ready': True, 'search_default_progress': True, 'search_default_pending': True}</field>
         <field name="help" type="html">
           <p class="o_view_nocontent_smiling_face">
-            Start a new work order
+            No work orders to do!
           </p><p>
-            To manufacture or assemble products, and use components and
-            finished products you must also handle manufacturing operations.
-            Manufacturing operations are often called Work Orders. The various
-            operations will have different impacts on the costs of
-            manufacturing and planning depending on the available workload.
+            Work orders are operations to do as part of a manufacturing order.
+            Operations are defined in the bill of materials or added in the manufacturing order directly.
           </p>
         </field>
     </record>
@@ -475,7 +477,7 @@
         <field name="model">mrp.workorder</field>
         <field name="arch" type="xml">
             <pivot string="Work Center Loads" sample="1">
-                <field name="duration_expected" type="measure"/>
+                <field name="duration_expected" type="measure" string="Expected Duration (minutes)"/>
                 <field name="workcenter_id" type="row"/>
                 <field name="production_date" type="row" interval="day"/>
             </pivot>
@@ -489,7 +491,7 @@
             <graph string="Work Center load" type="bar" sample="1">
                 <field name="production_date" interval="day"/>
                 <field name="workcenter_id"/>
-                <field name="duration_expected" type="measure"/>
+                <field name="duration_expected" type="measure" string="Expected Duration (minutes)"/>
             </graph>
         </field>
     </record>

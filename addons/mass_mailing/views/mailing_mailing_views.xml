@@ -31,7 +31,6 @@
             <field name="priority">10</field>
             <field name="arch" type="xml">
                 <tree string="Mailings" sample="1">
-                    <field name="state" invisible="1"/>
                     <field name="subject" attrs="{'readonly': [('state', 'in', ('sending', 'done'))]}"/>
                     <field name="mailing_type" invisible="1"/>
                     <field name="mailing_model_id" string="Recipients"/>
@@ -412,6 +411,7 @@
             <field name="arch" type="xml">
                 <graph string="Mailing" type="bar" sample="1">
                     <field name="state" type="row"/>
+                    <field name="color" invisible="1"/>
                 </graph>
             </field>
         </record>

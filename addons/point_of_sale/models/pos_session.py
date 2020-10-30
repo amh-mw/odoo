@@ -441,6 +441,7 @@ class PosSession(models.Model):
                         -1 if line['amount'] < 0 else 1,
                         # for taxes
                         tuple((tax['id'], tax['account_id'], tax['tax_repartition_line_id']) for tax in line['taxes']),
+                        line['base_tags'],
                     )
                     sales[sale_key] = self._update_amounts(sales[sale_key], {'amount': line['amount']}, line['date_order'])
                     # Combine tax lines
@@ -460,7 +461,7 @@ class PosSession(models.Model):
 
                 if self.company_id.anglo_saxon_accounting and order.picking_ids.ids:
                     # Combine stock lines
-                    stock_moves = self.env['stock.move'].search([
+                    stock_moves = self.env['stock.move'].sudo().search([
                         ('picking_id', 'in', order.picking_ids.ids),
                         ('company_id.anglo_saxon_accounting', '=', True),
                         ('product_id.categ_id.property_valuation', '=', 'real_time')
@@ -485,7 +486,7 @@ class PosSession(models.Model):
         if self.company_id.anglo_saxon_accounting:
             global_session_pickings = self.picking_ids.filtered(lambda p: not p.pos_order_id)
             if global_session_pickings:
-                stock_moves = self.env['stock.move'].search([
+                stock_moves = self.env['stock.move'].sudo().search([
                     ('picking_id', 'in', global_session_pickings.ids),
                     ('company_id.anglo_saxon_accounting', '=', True),
                     ('product_id.categ_id.property_valuation', '=', 'real_time'),
@@ -574,7 +575,7 @@ class PosSession(models.Model):
         split_cash_receivable_vals = defaultdict(list)
         for payment, amounts in split_receivables_cash.items():
             statement = statements_by_journal_id[payment.payment_method_id.cash_journal_id.id]
-            split_cash_statement_line_vals[statement].append(self._get_statement_line_vals(statement, payment.payment_method_id.receivable_account_id, amounts['amount']))
+            split_cash_statement_line_vals[statement].append(self._get_split_statement_line_vals(statement, payment, amounts['amount']))
             split_cash_receivable_vals[statement].append(self._get_split_receivable_vals(payment, amounts['amount'], amounts['amount_converted']))
         # handle combine cash payments
         combine_cash_statement_line_vals = defaultdict(list)
@@ -715,11 +716,13 @@ class PosSession(models.Model):
         # The 'is_refund' parameter is used to compute the tax tags. Ultimately, the tags are part
         # of the key used for summing taxes. Since the POS UI doesn't support the tags, inconsistencies
         # may arise in 'Round Globally'.
+        check_refund = lambda x: x.qty * x.price_unit < 0
         if self.company_id.tax_calculation_rounding_method == 'round_globally':
-            is_refund = all(line.qty < 0 for line in order_line.order_id.lines)
+            is_refund = all(check_refund(line) for line in order_line.order_id.lines)
         else:
-            is_refund = order_line.qty < 0
-        taxes = tax_ids.compute_all(price_unit=price, quantity=abs(order_line.qty), currency=self.currency_id, is_refund=is_refund).get('taxes', [])
+            is_refund = check_refund(order_line)
+        tax_data = tax_ids.compute_all(price_unit=price, quantity=abs(order_line.qty), currency=self.currency_id, is_refund=is_refund)
+        taxes = tax_data['taxes']
         date_order = order_line.order_id.date_order
         taxes = [{'date_order': date_order, **tax} for tax in taxes]
         return {
@@ -727,6 +730,7 @@ class PosSession(models.Model):
             'income_account_id': get_income_account(order_line).id,
             'amount': order_line.price_subtotal,
             'taxes': taxes,
+            'base_tags': tuple(tax_data['base_tags']),
         }
 
     def _get_rounding_difference_vals(self, amount, amount_converted):
@@ -769,23 +773,19 @@ class PosSession(models.Model):
         return self._credit_amounts(partial_vals, amount, amount_converted)
 
     def _get_sale_vals(self, key, amount, amount_converted):
-        account_id, sign, tax_keys = key
+        account_id, sign, tax_keys, base_tag_ids = key
         tax_ids = set(tax[0] for tax in tax_keys)
         applied_taxes = self.env['account.tax'].browse(tax_ids)
         title = 'Sales' if sign == 1 else 'Refund'
         name = '%s untaxed' % title
         if applied_taxes:
             name = '%s with %s' % (title, ', '.join([tax.name for tax in applied_taxes]))
-        base_tags = applied_taxes\
-            .mapped('invoice_repartition_line_ids' if sign == 1 else 'refund_repartition_line_ids')\
-            .filtered(lambda line: line.repartition_type == 'base')\
-            .tag_ids
         partial_vals = {
             'name': name,
             'account_id': account_id,
             'move_id': self.move_id.id,
             'tax_ids': [(6, 0, tax_ids)],
-            'tax_tag_ids': [(6, 0, base_tags.ids)],
+            'tax_tag_ids': [(6, 0, base_tag_ids)],
         }
         return self._credit_amounts(partial_vals, amount, amount_converted)
 
@@ -810,14 +810,20 @@ class PosSession(models.Model):
         partial_args = {'account_id': out_account.id, 'move_id': self.move_id.id}
         return self._credit_amounts(partial_args, amount, amount_converted, force_company_currency=True)
 
-    def _get_statement_line_vals(self, statement, receivable_account, amount):
+    def _get_statement_line_vals(self, statement, receivable_account, amount, date=False):
         return {
+            'date': date or fields.Date.context_today(self),
             'amount': amount,
             'payment_ref': self.name,
             'statement_id': statement.id,
             'journal_id': statement.journal_id.id,
             'counterpart_account_id': receivable_account.id,
         }
+
+    def _get_split_statement_line_vals(self, statement, payment, amount):
+        res = self._get_statement_line_vals(statement, payment.payment_method_id.receivable_account_id, amount, payment.payment_date.date())
+        res['partner_id'] = self.env['res.partner']._find_accounting_partner(payment.partner_id).id
+        return res
 
     def _update_amounts(self, old_amounts, amounts_to_add, date, round=True, force_company_currency=False):
         """Responsible for adding `amounts_to_add` to `old_amounts` considering the currency of the session.
@@ -1010,7 +1016,7 @@ class PosSession(models.Model):
         return {
             'type': 'ir.actions.act_url',
             'target': 'self',
-            'url':   '/pos/web?config_id=%d' % self.config_id.id,
+            'url': self.config_id._get_pos_base_url() + '?config_id=%d' % self.config_id.id,
         }
 
     def open_cashbox_pos(self):

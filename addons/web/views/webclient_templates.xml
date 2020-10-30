@@ -231,6 +231,7 @@
         <link rel="stylesheet" type="text/scss" href="/web/static/src/scss/attachment_preview.scss"/>
         <link rel="stylesheet" type="text/scss" href="/web/static/src/scss/notification.scss"/>
         <link rel="stylesheet" type="text/scss" href="/web/static/src/scss/base_document_layout.scss"/>
+        <link rel="stylesheet" type="text/scss" href="/web/static/src/scss/special_fields.scss"/>
         <link rel="stylesheet" type="text/scss" href="/web/static/src/scss/ribbon.scss"/>
         <link rel="stylesheet" type="text/scss" href="/web/static/src/scss/base_settings.scss"/>
         <script type="text/javascript" src="/base/static/src/js/res_config_settings.js"></script>
@@ -465,19 +466,18 @@
         <xpath expr="//head/meta[last()]" position="after">
             <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
         </xpath>
-        <xpath expr="//head" position="inside">
-            <script type="text/javascript">
-                const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                document.cookie = `tz=${userTZ}; path=/`;
-            </script>
-        </xpath>
         <xpath expr="//head/link[last()]" position="after">
+            <link rel="preload" href="/web/static/lib/fontawesome/fonts/fontawesome-webfont.woff2?v=4.7.0" as="font" crossorigin=""/>
             <t t-call-assets="web.assets_common" t-js="false"/>
             <t t-call-assets="web.assets_frontend" t-js="false"/>
         </xpath>
         <xpath expr="//head/script" position="after">
             <script type="text/javascript">
                 odoo.session_info = <t t-raw="json.dumps(request.env['ir.http'].get_frontend_session_info())"/>;
+                if (!/(^|;\s)tz=/.test(document.cookie)) {
+                    const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    document.cookie = `tz=${userTZ}; path=/`;
+                }
             </script>
             <t t-call-assets="web.assets_common_minimal_js" t-css="false" defer_load="True"/>
             <t t-call-assets="web.assets_frontend_minimal_js" t-css="false" defer_load="True"/>
@@ -809,6 +809,7 @@
         <script type="text/javascript" src="/web/static/lib/jquery.touchSwipe/jquery.touchSwipe.js"></script>
         <script type="text/javascript" src="/web/static/tests/fields/basic_fields_mobile_tests.js"></script>
         <script type="text/javascript" src="/web/static/tests/fields/relational_fields_mobile_tests.js"></script>
+        <script type="text/javascript" src="/web/static/tests/components/dropdown_menu_mobile_tests.js"></script>
     </template>
 
     <template id="web.benchmark_suite">
@@ -892,7 +893,7 @@
         For now, it is only use to display the PDF slide Viewer during an embed.
         Bundlized, the size is reduced to 5300≈ lines.
     -->
-    <template id="pdf_js_lib" groups="base.group_user" name="PDF JS Library">
+    <template id="pdf_js_lib" name="PDF JS Library">
         <script type="text/javascript" src="/web/static/lib/pdfjs/build/pdf.js"></script>
         <script type="text/javascript" src="/web/static/lib/pdfjs/build/pdf.worker.js"></script>
     </template>

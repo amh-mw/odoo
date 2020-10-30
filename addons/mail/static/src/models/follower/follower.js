@@ -64,21 +64,34 @@ function factory(dependencies) {
         }
 
         /**
+         * Opens the most appropriate view that is a profile for this follower.
+         */
+        async openProfile() {
+            if (this.partner) {
+                return this.partner.openProfile();
+            }
+            return this.channel.openProfile();
+        }
+
+        /**
          * Remove this follower from its related thread.
          */
         async remove() {
-            const args = [[this.followedThread.id]];
+            const partner_ids = [];
+            const channel_ids = [];
             if (this.partner) {
-                args.push([this.partner.id]);
+                partner_ids.push(this.partner.id);
             } else {
-                args.push([this.channel.id]);
+                channel_ids.push(this.channel.id);
             }
             await this.async(() => this.env.services.rpc({
                 model: this.followedThread.model,
                 method: 'message_unsubscribe',
-                args
+                args: [[this.followedThread.id], partner_ids, channel_ids]
             }));
+            const followedThread = this.followedThread;
             this.delete();
+            followedThread.fetchAndUpdateSuggestedRecipients();
         }
 
         /**

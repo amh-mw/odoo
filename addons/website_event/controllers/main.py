@@ -312,7 +312,27 @@ class WebsiteEventController(http.Controller):
                 availability_check = False
         if not tickets:
             return False
-        return request.env['ir.ui.view']._render_template("website_event.registration_attendee_details", {'tickets': tickets, 'event': event, 'availability_check': availability_check})
+        default_first_attendee = {}
+        if not request.env.user._is_public():
+            default_first_attendee = {
+                "name": request.env.user.name,
+                "email": request.env.user.email,
+                "phone": request.env.user.mobile or request.env.user.phone,
+            }
+        else:
+            visitor = request.env['website.visitor']._get_visitor_from_request()
+            if visitor.email:
+                default_first_attendee = {
+                    "name": visitor.name,
+                    "email": visitor.email,
+                    "phone": visitor.mobile,
+                }
+        return request.env['ir.ui.view']._render_template("website_event.registration_attendee_details", {
+            'tickets': tickets,
+            'event': event,
+            'availability_check': availability_check,
+            'default_first_attendee': default_first_attendee,
+        })
 
     def _process_attendees_form(self, event, form_details):
         """ Process data posted from the attendee details form.
@@ -383,13 +403,17 @@ class WebsiteEventController(http.Controller):
         registrations = self._process_attendees_form(event, post)
         attendees_sudo = self._create_attendees_from_registration_post(event, registrations)
 
+        return request.render("website_event.registration_complete",
+            self._get_registration_confirm_values(event, attendees_sudo))
+
+    def _get_registration_confirm_values(self, event, attendees_sudo):
         urls = event._get_event_resource_urls()
-        return request.render("website_event.registration_complete", {
+        return {
             'attendees': attendees_sudo,
             'event': event,
             'google_url': urls.get('google_url'),
             'iCal_url': urls.get('iCal_url')
-        })
+        }
 
     def _extract_searched_event_tags(self, searches):
         tags = request.env['event.tag']

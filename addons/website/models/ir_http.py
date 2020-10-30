@@ -19,9 +19,9 @@ from odoo import registry, SUPERUSER_ID
 from odoo.http import request
 from odoo.tools.safe_eval import safe_eval
 from odoo.osv.expression import FALSE_DOMAIN
-from odoo.tools.lru import LRU
 
-from odoo.addons.http_routing.models.ir_http import ModelConverter, _guess_mimetype
+from odoo.addons.http_routing.models import ir_http
+from odoo.addons.http_routing.models.ir_http import _guess_mimetype
 from odoo.addons.portal.controllers.portal import _build_url_w_params
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,6 @@ class Http(models.AbstractModel):
     @classmethod
     def clear_caches(cls):
         super(Http, cls)._clear_routing_map()
-        cls.clear_cached_pages()
         return super(Http, cls).clear_caches()
 
     @classmethod
@@ -244,10 +243,6 @@ class Http(models.AbstractModel):
         return mods + [mod for mod in installed if mod.startswith('website')]
 
     @classmethod
-    def clear_cached_pages(cls):
-        cls._cached_pages = LRU(1024)
-
-    @classmethod
     def _serve_page(cls):
         req_page = request.httprequest.path
         page_domain = [('url', '=', req_page)] + request.website.website_domain()
@@ -255,6 +250,10 @@ class Http(models.AbstractModel):
         published_domain = page_domain
         # specific page first
         page = request.env['website.page'].sudo().search(published_domain, order='website_id asc', limit=1)
+
+        # redirect withtout trailing /
+        if not page and req_page != "/" and req_page.endswith("/"):
+            return request.redirect(req_page[:-1])
 
         if page:
             # prefetch all menus (it will prefetch website.page too)
@@ -268,22 +267,17 @@ class Http(models.AbstractModel):
                 and request.httprequest.method == "GET"
                 and request.env.user._is_public()    # only cache for unlogged user
                 and 'nocache' not in request.params  # allow bypass cache / debug
+                and not request.session.debug
                 and len(cache_key) and cache_key[-1] is not None  # nocache via expr
             ):
                 need_to_cache = True
-                if not hasattr(cls, '_cached_pages'):
-                    cls.clear_cached_pages()  # init LRU
-
-                # use cached version
                 try:
-                    r = cls._cached_pages[cache_key]
+                    r = page._get_cache_response(cache_key)
                     if r['time'] + page.cache_time > time.time():
                         response = werkzeug.Response(r['content'], mimetype=r['contenttype'])
                         response._cached_template = r['template']
                         response._cached_page = page
                         return response
-                    else:
-                        cls._cached_pages[cache_key]
                 except KeyError:
                     pass
 
@@ -295,13 +289,12 @@ class Http(models.AbstractModel):
 
             if need_to_cache and response.status_code == 200:
                 r = response.render()
-                cls._cached_pages[cache_key] = {
+                page._set_cache_response(cache_key, {
                     'content': r,
                     'contenttype': response.headers['Content-Type'],
                     'time': time.time(),
                     'template': getattr(response, 'qcontext', {}).get('response_template')
-                }
-
+                })
             return response
         return False
 
@@ -426,7 +419,7 @@ class Http(models.AbstractModel):
         return session_info
 
 
-class ModelConverter(ModelConverter):
+class ModelConverter(ir_http.ModelConverter):
 
     def generate(self, uid, dom=None, args=None):
         Model = request.env[self.model].with_user(uid)

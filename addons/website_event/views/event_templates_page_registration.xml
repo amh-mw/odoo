@@ -140,7 +140,7 @@
             </t>
         </div>
     </div>
-    <form t-if="event.event_registrations_open and (not event.event_ticket_ids or not all([ticket.is_expired for ticket in event.event_ticket_ids]))"
+    <form t-if="event.event_registrations_open and (not event.event_ticket_ids or any(not ticket.is_expired for ticket in event.event_ticket_ids))"
         id="registration_form"
         class="mb-5"
         t-attf-action="/event/#{slug(event)}/registration/new" method="post"
@@ -269,15 +269,18 @@
                                 <div class="row">
                                     <div class="col-lg my-2">
                                         <label>Name</label>
-                                        <input class="form-control" type="text" t-attf-name="#{counter}-name" required="This field is required"/>
+                                        <input class="form-control" type="text" t-attf-name="#{counter}-name" required="This field is required"
+                                            t-att-value="default_first_attendee.get('name', '') if counter == 1 else ''"/>
                                     </div>
                                     <div class="col-lg my-2">
                                         <label>Email</label>
-                                        <input class="form-control" type="email" t-attf-name="#{counter}-email" required="This field is required"/>
+                                        <input class="form-control" type="email" t-attf-name="#{counter}-email" required="This field is required"
+                                            t-att-value="default_first_attendee.get('email', '') if counter == 1 else ''"/>
                                     </div>
                                     <div class="col-lg my-2">
                                         <label>Phone <small>(Optional)</small></label>
-                                        <input class="form-control" type="tel" t-attf-name="#{counter}-phone"/>
+                                        <input class="form-control" type="tel" t-attf-name="#{counter}-phone"
+                                            t-att-value="default_first_attendee.get('phone', '') if counter == 1 else ''"/>
                                     </div>
                                     <input class="d-none" type="text" t-attf-name="#{counter}-event_ticket_id" t-attf-value="#{ticket['id']}"/>
                                 </div>
@@ -336,8 +339,22 @@
                 </div>
             </div>
             <div class="row mb-3">
-                <div class="col-lg-8">
+                <div class="col">
                     <p><b>Start</b> <span itemprop="startDate" t-esc="event.date_begin_located"/><br/> <b>End</b> <span itemprop="endDate" t-esc="event.date_end_located"/></p>
+                    <div class="mt-4">
+                        <h5 t-field="event.address_id" class="text-secondary font-weight-bold" t-options='{
+                            "widget": "contact",
+                            "fields": ["name"]
+                            }'/>
+                        <a itemprop="location" t-att-href="event.google_map_link()" target="_BLANK" temprop="location" t-field="event.address_id" t-options='{
+                            "widget": "contact",
+                            "fields": ["address"]
+                            }'/>
+                        <div itemprop="location" t-field="event.address_id" t-options='{
+                            "widget": "contact",
+                            "fields": ["phone", "mobile", "email"]
+                            }'/>
+                    </div>
                     <div id="add_to_calendar" class="mt-4 d-flex flex-column flex-md-row">
                         <a role="button" class="btn btn-primary" t-att-href="iCal_url">
                             <i class="fa fa-fw fa-calendar"/> Add to iCal/Outlook
@@ -346,20 +363,6 @@
                             <i class="fa fa-fw fa-calendar"/> Add to Google Calendar
                         </a>
                     </div>
-                </div>
-                <div class="col-lg-4 mt-4 mt-lg-0">
-                    <h4 t-field="event.address_id" class="text-secondary font-weight-bold" t-options='{
-                        "widget": "contact",
-                        "fields": ["name"]
-                        }'/>
-                    <a itemprop="location" t-att-href="event.google_map_link()" target="_BLANK" temprop="location" t-field="event.address_id" t-options='{
-                        "widget": "contact",
-                        "fields": ["address"]
-                        }'/>
-                    <div itemprop="location" t-field="event.address_id" t-options='{
-                        "widget": "contact",
-                        "fields": ["phone", "mobile", "email"]
-                        }'/>
                 </div>
             </div>
         </div>

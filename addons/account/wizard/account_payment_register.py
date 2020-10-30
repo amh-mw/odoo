@@ -9,7 +9,7 @@ class AccountPaymentRegister(models.TransientModel):
     _description = 'Register Payment'
 
     # == Business fields ==
-    payment_date = fields.Date(String="Payment Date", required=True,
+    payment_date = fields.Date(string="Payment Date", required=True,
         default=fields.Date.context_today)
     amount = fields.Monetary(currency_field='currency_id', store=True, readonly=False,
         compute='_compute_amount')
@@ -261,7 +261,7 @@ class AccountPaymentRegister(models.TransientModel):
     def _compute_partner_bank_id(self):
         ''' The default partner_bank_id will be the first available on the partner. '''
         for wizard in self:
-            available_partner_bank_accounts = wizard.partner_id.bank_ids
+            available_partner_bank_accounts = wizard.partner_id.bank_ids.filtered_domain([('company_id', '=', wizard.company_id.id)])
             if available_partner_bank_accounts:
                 wizard.partner_bank_id = available_partner_bank_accounts[0]._origin
             else:
@@ -472,6 +472,12 @@ class AccountPaymentRegister(models.TransientModel):
 
         domain = [('account_internal_type', 'in', ('receivable', 'payable')), ('reconciled', '=', False)]
         for payment, lines in zip(payments, to_reconcile):
+
+            # When using the payment tokens, the payment could not be posted at this point (e.g. the transaction failed)
+            # and then, we can't perform the reconciliation.
+            if payment.state != 'posted':
+                continue
+
             payment_lines = payment.line_ids.filtered_domain(domain)
             for account in payment_lines.account_id:
                 (payment_lines + lines)\

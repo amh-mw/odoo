@@ -47,6 +47,7 @@ QUnit.test('Notification Sent', async function (assert) {
 
     await this.start();
     const threadViewer = this.env.models['mail.thread_viewer'].create({
+        hasThreadView: true,
         thread: [['create', {
             id: 11,
             model: 'mail.channel',
@@ -64,7 +65,7 @@ QUnit.test('Notification Sent', async function (assert) {
         originThread: [['link', threadViewer.thread]]
     });
     await this.createMessageComponent(message, {
-        threadViewerLocalId: threadViewer.localId
+        threadViewLocalId: threadViewer.threadView.localId
     });
 
     assert.containsOnce(
@@ -74,7 +75,7 @@ QUnit.test('Notification Sent', async function (assert) {
     );
     assert.containsOnce(
         document.body,
-        '.o_Message_notificationIconContainer',
+        '.o_Message_notificationIconClickable',
         "should display the notification icon container"
     );
     assert.containsOnce(
@@ -89,7 +90,7 @@ QUnit.test('Notification Sent', async function (assert) {
     );
 
     await afterNextRender(() => {
-        document.querySelector('.o_Message_notificationIconContainer').click();
+        document.querySelector('.o_Message_notificationIconClickable').click();
     });
     assert.containsOnce(
         document.body,
@@ -138,6 +139,7 @@ QUnit.test('Notification Error', async function (assert) {
 
     await this.start({ env: { bus } });
     const threadViewer = this.env.models['mail.thread_viewer'].create({
+        hasThreadView: true,
         thread: [['create', {
             id: 11,
             model: 'mail.channel',
@@ -154,7 +156,7 @@ QUnit.test('Notification Error', async function (assert) {
         originThread: [['link', threadViewer.thread]]
     });
     await this.createMessageComponent(message, {
-        threadViewerLocalId: threadViewer.localId
+        threadViewLocalId: threadViewer.threadView.localId
     });
 
     assert.containsOnce(
@@ -164,7 +166,7 @@ QUnit.test('Notification Error', async function (assert) {
     );
     assert.containsOnce(
         document.body,
-        '.o_Message_notificationIconContainer',
+        '.o_Message_notificationIconClickable',
         "should display the notification icon container"
     );
     assert.containsOnce(
@@ -179,7 +181,7 @@ QUnit.test('Notification Error', async function (assert) {
     );
 
     await afterNextRender(() => {
-        document.querySelector('.o_Message_notificationIconContainer').click();
+        document.querySelector('.o_Message_notificationIconClickable').click();
     });
     assert.verifySteps(
         ['do_action'],

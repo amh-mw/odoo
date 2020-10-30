@@ -34,7 +34,6 @@ class MrpWorkorder(models.Model):
     product_id = fields.Many2one(related='production_id.product_id', readonly=True, store=True, check_company=True)
     product_tracking = fields.Selection(related="product_id.tracking")
     product_uom_id = fields.Many2one('uom.uom', 'Unit of Measure', required=True, readonly=True)
-    use_create_components_lots = fields.Boolean(related="production_id.picking_type_id.use_create_components_lots")
     production_id = fields.Many2one('mrp.production', 'Manufacturing Order', required=True, check_company=True, readonly=True)
     production_availability = fields.Selection(
         string='Stock Availability', readonly=True,
@@ -75,13 +74,13 @@ class MrpWorkorder(models.Model):
         compute='_compute_dates_planned',
         inverse='_set_dates_planned',
         states={'done': [('readonly', True)], 'cancel': [('readonly', True)]},
-        store=True, tracking=True, copy=False)
+        store=True, copy=False)
     date_planned_finished = fields.Datetime(
         'Scheduled End Date',
         compute='_compute_dates_planned',
         inverse='_set_dates_planned',
         states={'done': [('readonly', True)], 'cancel': [('readonly', True)]},
-        store=True, tracking=True, copy=False)
+        store=True, copy=False)
     date_start = fields.Datetime(
         'Start Date', copy=False,
         states={'done': [('readonly', True)], 'cancel': [('readonly', True)]})
@@ -95,10 +94,10 @@ class MrpWorkorder(models.Model):
         help="Expected duration (in minutes)")
     duration = fields.Float(
         'Real Duration', compute='_compute_duration', inverse='_set_duration',
-        readonly=False, store=True)
+        readonly=False, store=True, copy=False)
     duration_unit = fields.Float(
         'Duration Per Unit', compute='_compute_duration',
-        readonly=True, store=True)
+        group_operator="avg", readonly=True, store=True)
     duration_percent = fields.Integer(
         'Duration Deviation (%)', compute='_compute_duration',
         group_operator="avg", readonly=True, store=True)
@@ -193,7 +192,7 @@ class MrpWorkorder(models.Model):
                 if conflicted_dict.get(wo.id):
                     infos.append({
                         'color': 'text-danger',
-                        'msg': _("Planned at the same time than other workorder(s) at %s", wo.workcenter_id.display_name)
+                        'msg': _("Planned at the same time as other workorder(s) at %s", wo.workcenter_id.display_name)
                     })
             color_icon = infos and infos[-1]['color'] or False
             wo.show_json_popover = bool(color_icon)
@@ -239,7 +238,7 @@ class MrpWorkorder(models.Model):
     def _set_dates_planned(self):
         date_from = self[0].date_planned_start
         date_to = self[0].date_planned_finished
-        self.mapped('leave_id').write({
+        self.mapped('leave_id').sudo().write({
             'date_from': date_from,
             'date_to': date_to,
         })
@@ -334,7 +333,7 @@ class MrpWorkorder(models.Model):
             if order.working_user_ids:
                 order.last_working_user_id = order.working_user_ids[-1]
             elif order.time_ids:
-                order.last_working_user_id = order.time_ids.sorted('date_end')[-1].user_id
+                order.last_working_user_id = order.time_ids.filtered('date_end').sorted('date_end')[-1].user_id if order.time_ids.filtered('date_end') else order.time_ids[-1].user_id
             else:
                 order.last_working_user_id = False
             if order.time_ids.filtered(lambda x: (x.user_id.id == self.env.user.id) and (not x.date_end) and (x.loss_type in ('productive', 'performance'))):
@@ -758,7 +757,9 @@ class MrpWorkorder(models.Model):
             lambda move: move.product_id == self.product_id and
             move.state not in ('done', 'cancel')
         )
-        if production_move and production_move.product_id.tracking != 'none':
+        if not production_move:
+            return
+        if production_move.product_id.tracking != 'none':
             if not self.finished_lot_id:
                 raise UserError(_('You need to provide a lot for the finished product.'))
             move_line = production_move.move_line_ids.filtered(

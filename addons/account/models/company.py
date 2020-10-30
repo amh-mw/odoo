@@ -104,6 +104,12 @@ class ResCompany(models.Model):
     account_invoice_onboarding_state = fields.Selection(DASHBOARD_ONBOARDING_STATES, string="State of the account invoice onboarding panel", default='not_done')
     account_dashboard_onboarding_state = fields.Selection(DASHBOARD_ONBOARDING_STATES, string="State of the account dashboard onboarding panel", default='not_done')
     invoice_terms = fields.Text(string='Default Terms and Conditions', translate=True)
+    terms_type = fields.Selection([('plain', 'Terms as Notes'), ('html', 'Terms as Web Page')],
+                                  string='Terms & Conditions format', default='plain')
+    invoice_terms_html = fields.Html(string='Default Terms and Conditions as a Web page', translate=True,
+                                     default="""<h1 style="text-align: center; ">Terms &amp; Conditions</h1>
+                                     <p>Your conditions...</p>""")
+
     account_setup_bill_state = fields.Selection(ONBOARDING_STEP_STATES, string="State of the onboarding bill step", default='not_done')
 
     # Needed in the Point of Sale
@@ -538,3 +544,16 @@ class ResCompany(models.Model):
             results_by_journal['results'].append(rslt)
 
         return results_by_journal
+
+    def compute_fiscalyear_dates(self, current_date):
+        """
+        The role of this method is to provide a fallback when account_accounting is not installed.
+        As the fiscal year is irrelevant when account_accounting is not installed, this method returns the calendar year.
+        :param current_date: A datetime.date/datetime.datetime object.
+        :return: A dictionary containing:
+            * date_from
+            * date_to
+        """
+
+        return {'date_from': datetime(year=current_date.year, month=1, day=1).date(),
+                'date_to': datetime(year=current_date.year, month=12, day=31).date()}

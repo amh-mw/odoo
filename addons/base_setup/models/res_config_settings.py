@@ -2,6 +2,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from odoo import api, fields, models, _
+from odoo.exceptions import UserError
 
 
 class ResConfigSettings(models.TransientModel):
@@ -20,11 +21,12 @@ class ResConfigSettings(models.TransientModel):
     module_google_calendar = fields.Boolean(
         string='Allow the users to synchronize their calendar  with Google Calendar')
     module_microsoft_calendar = fields.Boolean(
-        string='Allow the users to synchronize their calendar with Office 365 Calendar')
+        string='Allow the users to synchronize their calendar with Outlook Calendar')
     module_google_drive = fields.Boolean("Attach Google documents to any record")
     module_google_spreadsheet = fields.Boolean("Google Spreadsheet")
     module_auth_oauth = fields.Boolean("Use external authentication providers (OAuth)")
     module_auth_ldap = fields.Boolean("LDAP Authentication")
+    # TODO: remove in master
     module_base_gengo = fields.Boolean("Translate Your Website with Gengo")
     module_account_inter_company_rules = fields.Boolean("Manage Inter Company")
     module_pad = fields.Boolean("Collaborative Pads")
@@ -61,7 +63,10 @@ class ResConfigSettings(models.TransientModel):
 
     def open_default_user(self):
         action = self.env["ir.actions.actions"]._for_xml_id("base.action_res_users")
-        action['res_id'] = self.env.ref('base.default_user').id
+        if self.env.ref('base.default_user', raise_if_not_found=False):
+            action['res_id'] = self.env.ref('base.default_user').id
+        else:
+            raise UserError(_("Default User Template not found."))
         action['views'] = [[self.env.ref('base.view_users_form').id, 'form']]
         return action
 

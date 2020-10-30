@@ -6,29 +6,15 @@ from odoo import api, fields, models, tools, SUPERUSER_ID, _
 from odoo.exceptions import MissingError, UserError, ValidationError, AccessError
 from odoo.osv import expression
 from odoo.tools.safe_eval import safe_eval, test_python_expr
-from odoo.tools import wrap_module
-from odoo.http import request
 
 import base64
 from collections import defaultdict
-import datetime
 import functools
 import logging
-import time
 
 from pytz import timezone
 
 _logger = logging.getLogger(__name__)
-
-# build dateutil helper, starting with the relevant *lazy* imports
-import dateutil
-import dateutil.parser
-import dateutil.relativedelta
-import dateutil.rrule
-import dateutil.tz
-mods = {'parser', 'relativedelta', 'rrule', 'tz'}
-attribs = {atr for m in mods for atr in getattr(dateutil, m).__all__}
-dateutil = wrap_module(dateutil, mods | attribs)
 
 
 class IrActions(models.Model):
@@ -84,9 +70,9 @@ class IrActions(models.Model):
         return {
             'uid': self._uid,
             'user': self.env.user,
-            'time': time,
-            'datetime': datetime,
-            'dateutil': dateutil,
+            'time': tools.safe_eval.time,
+            'datetime': tools.safe_eval.datetime,
+            'dateutil': tools.safe_eval.dateutil,
             'timezone': timezone,
             'b64encode': base64.b64encode,
             'b64decode': base64.b64decode,
@@ -139,14 +125,12 @@ class IrActions(models.Model):
     def _for_xml_id(self, full_xml_id):
         """ Returns the action content for the provided xml_id
 
-        :param module: the module the act_window originates in
         :param xml_id: the namespace-less id of the action (the @id
                        attribute from the XML file)
         :return: A read() view of the ir.actions.action safe for web use
         """
         record = self.env.ref(full_xml_id)
         assert isinstance(self.env[record._name], type(self))
-        # TO CHECK MAT: check groups_id/res_model access?
         action = record.sudo().read()[0]
         return {
             field: value
@@ -293,6 +277,9 @@ class IrActionsActWindow(models.Model):
             "context", "domain", "filter", "groups_id", "limit", "res_id",
             "res_model", "search_view", "search_view_id", "target", "view_id",
             "view_mode", "views",
+            # `flags` is not a real field of ir.actions.act_window but is used
+            # to give the parameters to generate the action
+            "flags"
         }
 
 
@@ -388,7 +375,7 @@ class IrActionsServer(models.Model):
 #  - records: recordset of all records on which the action is triggered in multi-mode; may be void
 #  - time, datetime, dateutil, timezone: useful Python libraries
 #  - log: log(message, level='info'): logging function to record debug information in ir.logging table
-#  - Warning: Warning Exception to use with raise
+#  - UserError: Warning Exception to use with raise
 # To return an action, assign: action = {...}\n\n\n\n"""
 
     @api.model
@@ -678,10 +665,10 @@ class IrServerObjectLines(models.Model):
                 try:
                     value = int(value)
                     if not self.env[line.col1.relation].browse(value).exists():
-                        record = self.env[line.col1.relation]._search([], limit=1)
+                        record = list(self.env[line.col1.relation]._search([], limit=1))
                         value = record[0] if record else 0
                 except ValueError:
-                    record = self.env[line.col1.relation]._search([], limit=1)
+                    record = list(self.env[line.col1.relation]._search([], limit=1))
                     value = record[0] if record else 0
                 line.resource_ref = '%s,%s' % (line.col1.relation, value)
             else:

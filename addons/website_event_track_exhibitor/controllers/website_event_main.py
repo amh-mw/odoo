@@ -5,10 +5,10 @@ from babel.dates import format_datetime
 
 from odoo import _
 from odoo.http import request
-from odoo.addons.website_event.controllers.main import WebsiteEventController
+from odoo.addons.website_event.controllers import main
 
 
-class WebsiteEventController(WebsiteEventController):
+class WebsiteEventController(main.WebsiteEventController):
     def _prepare_event_register_values(self, event, **post):
         values = super(WebsiteEventController, self)._prepare_event_register_values(event, **post)
 
@@ -18,7 +18,7 @@ class WebsiteEventController(WebsiteEventController):
                 date_begin = format_datetime(event.with_context(tz=event.date_tz).date_begin, format="medium")
 
                 values["toast_message"] = (
-                    _('The event %s starts at %s (%s). \nJoin us there to meet %s !')
+                    _('The event %s starts on %s (%s). \nJoin us there to meet %s !')
                     % (event.name, date_begin, event.date_tz, sponsor.partner_name)
                 )
 

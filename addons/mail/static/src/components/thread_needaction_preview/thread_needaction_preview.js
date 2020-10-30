@@ -64,7 +64,7 @@ class ThreadNeedactionPreview extends Component {
             return this.thread.moduleIcon;
         }
         if (this.thread.correspondent) {
-            return `/web/image/res.partner/${this.thread.correspondent.id}/image_128`;
+            return this.thread.correspondent.avatarUrl;
         }
         if (this.thread.model === 'mail.channel') {
             return `/web/image/mail.channel/${this.thread.id}/image_128`;
@@ -105,7 +105,11 @@ class ThreadNeedactionPreview extends Component {
             // handled in `_onClickMarkAsRead`
             return;
         }
-        this.trigger('o-select-thread', { thread: this.thread });
+        this.thread.markNeedactionMessagesAsRead();
+        this.thread.open();
+        if (!this.env.messaging.device.isMobile) {
+            this.env.messaging.messagingMenu.close();
+        }
     }
 
     /**

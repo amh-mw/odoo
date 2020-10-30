@@ -40,7 +40,7 @@ odoo.define('web.favorite_menu_tests', function (require) {
             assert.containsNone(controlPanel, '.dropdown-divider');
             assert.containsOnce(controlPanel, '.o_add_favorite');
             assert.strictEqual(controlPanel.el.querySelector('.o_add_favorite > button').innerText.trim(),
-                "Save Current Search");
+                "Save current search");
 
             await cpHelpers.toggleSaveFavorite(controlPanel);
             assert.strictEqual(
@@ -289,7 +289,7 @@ odoo.define('web.favorite_menu_tests', function (require) {
             await testUtils.dom.click(document.querySelector('div.o_dialog footer button'));
             assert.deepEqual(cpHelpers.getFacetTexts(controlPanel), []);
             const itemEls = controlPanel.el.querySelectorAll('.o_favorite_menu .o_menu_item');
-            assert.deepEqual([...itemEls].map(e => e.innerText.trim()), ["Save Current Search"]);
+            assert.deepEqual([...itemEls].map(e => e.innerText.trim()), ["Save current search"]);
 
             controlPanel.destroy();
         });
@@ -577,6 +577,47 @@ odoo.define('web.favorite_menu_tests', function (require) {
 
             await testUtils.fields.editInput(filterNameInput, 'Awesome Test Customer Filter');
             await testUtils.dom.click(document.querySelector('.o_add_favorite button.btn-primary'));
+
+            form.destroy();
+        });
+
+        QUnit.test('modal loads saved search filters', async function (assert) {
+            assert.expect(1);
+            const data = {
+                partner: {
+                    fields: {
+                        bar: { string: "Bar", type: "many2one", relation: 'partner' },
+                    },
+                    // 10 records so that the Search button shows
+                    records: Array.apply(null, Array(10)).map(function(_, i) {
+                        return { id: i, display_name: "Record " + i, bar: 1 };
+                    })
+                },
+            };
+            const form = await createView({
+                arch: `
+                <form string="Partners">
+                    <sheet>
+                        <group>
+                            <field name="bar"/>
+                        </group>
+                    </sheet>
+                </form>`,
+                data,
+                model: 'partner',
+                res_id: 1,
+                View: FormView,
+                interceptsPropagate: {
+                    load_views: function (ev) {
+                        assert.ok(ev.data.options.load_filters, "opening dialog should load the filters");
+                    },
+                },
+            });
+
+            await testUtils.form.clickEdit(form);
+
+            await testUtils.fields.many2one.clickOpenDropdown('bar');
+            await testUtils.fields.many2one.clickItem('bar', 'Search');
 
             form.destroy();
         });

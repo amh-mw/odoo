@@ -95,6 +95,15 @@ class MockModels {
                 },
                 records: [],
             },
+            // Fake model to simulate "hardcoded" commands from python
+            'mail.channel_command': {
+                fields: {
+                    channel_types: { type: 'binary' }, // array is expected
+                    help: { type: 'char' },
+                    name: { type: 'char' },
+                },
+                records: [],
+            },
             'mail.followers': {
                 fields: {
                     channel_id: { type: 'integer' },
@@ -136,6 +145,8 @@ class MockModels {
                     res_model_name: { string: "Res Model Name", type: 'char' },
                     starred_partner_ids: { string: "Favorited By", type: 'many2many', relation: 'res.partner' },
                     subject: { string: "Subject", type: 'char' },
+                    subtype_id: { string: "Subtype id", type: 'many2one', relation: 'mail.message.subtype' },
+                    tracking_value_ids: { relation: 'mail.tracking.value', string: "Tracking values", type: 'one2many' },
                 },
                 records: [],
             },
@@ -167,6 +178,22 @@ class MockModels {
                     notification_status: { string: "Notification Status", type: 'selection', selection: [['ready', 'Ready to Send'], ['sent', 'Sent'], ['bounce', 'Bounced'], ['exception', 'Exception'], ['canceled', 'Canceled']], default: 'ready' },
                     notification_type: { string: "Notification Type", type: 'selection', selection: [['email', 'Handle by Emails'], ['inbox', 'Handle in Odoo']], default: 'email' },
                     res_partner_id: { string: "Needaction Recipient", type: 'many2one', relation: 'res.partner' },
+                },
+                records: [],
+            },
+            'mail.shortcode': {
+                fields: {
+                    source: { type: 'char' },
+                    substitution: { type: 'char' },
+                },
+                records: [],
+            },
+            'mail.tracking.value': {
+                fields: {
+                    changed_field: { string: 'Changed field', type: 'char' },
+                    field_type: { string: 'Field type', type: 'char' },
+                    new_value: { string: 'New value', type: 'char' },
+                    old_value: { string: 'Old value', type: 'char' },
                 },
                 records: [],
             },
@@ -204,6 +231,17 @@ class MockModels {
                     im_status: { string: "IM Status", type: 'char' },
                     name: { string: "Name", type: 'char' },
                     partner_id: { string: "Related partners", type: 'many2one', relation: 'res.partner' },
+                },
+                records: [],
+            },
+            'res.fake': {
+                fields: {
+                    email_cc: { type: 'char' },
+                    partner_ids: {
+                        string: "Related partners",
+                        type: 'many2one',
+                        relation: 'res.partner'
+                    },
                 },
                 records: [],
             },

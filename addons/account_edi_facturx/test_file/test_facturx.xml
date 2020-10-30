@@ -29,7 +29,7 @@ Conference room table</ram:Name>
 
             <ram:SpecifiedLineTradeAgreement>
                 <ram:GrossPriceProductTradePrice>
-                    <ram:ChargeAmount currencyID="USD">3210.00</ram:ChargeAmount>
+                    <ram:ChargeAmount currencyID="USD">642.00</ram:ChargeAmount>
                 </ram:GrossPriceProductTradePrice>
             </ram:SpecifiedLineTradeAgreement>
 
@@ -59,7 +59,7 @@ Four person modern office workstation</ram:Name>
 
             <ram:SpecifiedLineTradeAgreement>
                 <ram:GrossPriceProductTradePrice>
-                    <ram:ChargeAmount currencyID="USD">1400.00</ram:ChargeAmount>
+                    <ram:ChargeAmount currencyID="USD">280.00</ram:ChargeAmount>
                 </ram:GrossPriceProductTradePrice>
             </ram:SpecifiedLineTradeAgreement>
 
@@ -68,6 +68,9 @@ Four person modern office workstation</ram:Name>
             </ram:SpecifiedLineTradeDelivery>
 
             <ram:SpecifiedLineTradeSettlement>
+                <ram:ApplicableTradeTax>
+                    <ram:RateApplicablePercent>0.0</ram:RateApplicablePercent>
+                </ram:ApplicableTradeTax>
                 <ram:SpecifiedTradeSettlementLineMonetarySummation>
                     <ram:LineTotalAmount currencyID="USD">1400.00</ram:LineTotalAmount>
                 </ram:SpecifiedTradeSettlementLineMonetarySummation>
@@ -95,6 +98,9 @@ Four person modern office workstation</ram:Name>
                     <ram:CityName>San Francisco</ram:CityName>
                     <ram:CountryID>US</ram:CountryID>
                 </ram:PostalTradeAddress>
+                <ram:SpecifiedTaxRegistration>
+                    <ram:ID schemeID="VA">VAT789</ram:ID>
+                </ram:SpecifiedTaxRegistration>
             </ram:SellerTradeParty>
 
             <ram:BuyerTradeParty>
@@ -116,6 +122,9 @@ Four person modern office workstation</ram:Name>
                     <ram:CityName>Fremont</ram:CityName>
                     <ram:CountryID>US</ram:CountryID>
                 </ram:PostalTradeAddress>
+                <ram:SpecifiedTaxRegistration>
+                    <ram:ID schemeID="VA">VAT12345</ram:ID>
+                </ram:SpecifiedTaxRegistration>
             </ram:BuyerTradeParty>
 
             <ram:BuyerOrderReferencedDocument>

@@ -2449,6 +2449,28 @@ QUnit.module('Views', {
         form.destroy();
     });
 
+    QUnit.test('archive action with active field not in view', async function (assert) {
+        assert.expect(2);
+
+        // add active field on partner model, but do not put it in the view
+        this.data.partner.fields.active = {string: 'Active', type: 'char', default: true};
+
+        const form = await createView({
+            View: FormView,
+            model: 'partner',
+            data: this.data,
+            res_id: 1,
+            viewOptions: { hasActionMenus: true },
+            arch: '<form><field name="foo"/></form>',
+        });
+
+        await cpHelpers.toggleActionMenu(form);
+        assert.containsNone(form, '.o_cp_action_menus a:contains(Archive)');
+        assert.containsNone(form, '.o_cp_action_menus a:contains(Unarchive)');
+
+        form.destroy();
+    });
+
     QUnit.test('can duplicate a record', async function (assert) {
         assert.expect(3);
 
@@ -4943,7 +4965,7 @@ QUnit.module('Views', {
         assert.strictEqual(form.$('button .o_field_widget').children().length, 2,
             "the field widget should have 2 children, the text and the value");
         assert.strictEqual(parseInt(form.$('button .o_field_widget .o_stat_value').text()), 9,
-            "the value rendered should be the same than the field value");
+            "the value rendered should be the same as the field value");
         form.destroy();
     });
 
@@ -8603,6 +8625,38 @@ QUnit.module('Views', {
         form.destroy();
     });
 
+    QUnit.test('call canBeRemoved twice', async function (assert) {
+        assert.expect(4);
+
+        const form = await createView({
+            View: FormView,
+            model: 'partner',
+            data: this.data,
+            arch: '<form><field name="display_name"/><field name="foo"/></form>',
+            res_id: 1,
+            viewOptions: {
+                mode: 'edit',
+            },
+        });
+
+        assert.containsOnce(form, '.o_form_editable');
+        await testUtils.fields.editInput(form.$('.o_field_widget[name=foo]'), 'some value');
+
+        form.canBeRemoved();
+        await testUtils.nextTick();
+        assert.containsOnce(document.body, '.modal');
+
+        form.canBeRemoved();
+        await testUtils.nextTick();
+        assert.containsOnce(document.body, '.modal');
+
+        await testUtils.dom.click($('.modal .modal-footer .btn-secondary'));
+
+        assert.containsNone(document.body, '.modal');
+
+        form.destroy();
+    });
+
     QUnit.test('domain returned by onchange is cleared on discard', async function (assert) {
         assert.expect(4);
 
@@ -9517,7 +9571,7 @@ QUnit.module('Views', {
     });
 
     QUnit.test('reload a form view with a pie chart does not crash', async function (assert) {
-        assert.expect(3);
+        assert.expect(2);
 
         const form = await createView({
             View: FormView,
@@ -9529,15 +9583,11 @@ QUnit.module('Views', {
         });
 
         assert.containsOnce(form, '.o_widget');
-        const canvasId1 = form.el.querySelector('.o_widget canvas').id;
 
         await form.reload();
         await testUtils.nextTick();
 
         assert.containsOnce(form, '.o_widget');
-        const canvasId2 = form.el.querySelector('.o_widget canvas').id;
-        // A new canvas should be found in the dom
-        assert.notStrictEqual(canvasId1, canvasId2);
 
         form.destroy();
         delete widgetRegistry.map.test;
@@ -9567,7 +9617,7 @@ QUnit.module('Views', {
 
         form.destroy();
         delete fieldRegistryOwl.map.custom;
-        
+
         assert.verifySteps(['mounted', 'willUnmount']);
     });
 });

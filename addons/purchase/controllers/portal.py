@@ -10,18 +10,19 @@ from odoo.exceptions import AccessError, MissingError
 from odoo.http import request, Response
 from odoo.tools import image_process
 from odoo.tools.translate import _
-from odoo.addons.portal.controllers.portal import pager as portal_pager, CustomerPortal
+from odoo.addons.portal.controllers import portal
+from odoo.addons.portal.controllers.portal import pager as portal_pager
 from odoo.addons.web.controllers.main import Binary
 
 
-class CustomerPortal(CustomerPortal):
+class CustomerPortal(portal.CustomerPortal):
 
     def _prepare_home_portal_values(self, counters):
         values = super()._prepare_home_portal_values(counters)
         if 'purchase_count' in counters:
             values['purchase_count'] = request.env['purchase.order'].search_count([
                 ('state', 'in', ['purchase', 'done', 'cancel'])
-            ])
+            ]) if request.env['purchase.order'].check_access_rights('read', raise_exception=False) else 0
         return values
 
     def _purchase_order_get_page_view_values(self, order, access_token, **kwargs):
@@ -44,7 +45,6 @@ class CustomerPortal(CustomerPortal):
 
         domain = []
 
-        archive_groups = self._get_archive_groups('purchase.order', domain) if values.get('my_details') else []
         if date_begin and date_end:
             domain += [('create_date', '>', date_begin), ('create_date', '<=', date_end)]
 
@@ -93,7 +93,6 @@ class CustomerPortal(CustomerPortal):
             'orders': orders,
             'page_name': 'purchase',
             'pager': pager,
-            'archive_groups': archive_groups,
             'searchbar_sortings': searchbar_sortings,
             'sortby': sortby,
             'searchbar_filters': OrderedDict(sorted(searchbar_filters.items())),

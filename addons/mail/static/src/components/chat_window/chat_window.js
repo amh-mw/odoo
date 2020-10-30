@@ -4,7 +4,7 @@ odoo.define('mail/static/src/components/chat_window/chat_window.js', function (r
 const components = {
     AutocompleteInput: require('mail/static/src/components/autocomplete_input/autocomplete_input.js'),
     ChatWindowHeader: require('mail/static/src/components/chat_window_header/chat_window_header.js'),
-    ThreadViewer: require('mail/static/src/components/thread_viewer/thread_viewer.js'),
+    ThreadView: require('mail/static/src/components/thread_view/thread_view.js'),
 };
 const useStore = require('mail/static/src/component_hooks/use_store/use_store.js');
 const { isEventHandled } = require('mail/static/src/utils/utils.js');
@@ -115,12 +115,10 @@ class ChatWindow extends Component {
             isDoFocus: false,
             isFocused: true,
         });
-        if (this.chatWindow.isFolded) {
-            return;
-        }
-        if (!this.chatWindow.thread) {
+        if (this._inputRef.comp) {
             this._inputRef.comp.focus();
-        } else {
+        }
+        if (this._threadRef.comp) {
             this._threadRef.comp.focus();
         }
     }
@@ -134,6 +132,12 @@ class ChatWindow extends Component {
      * @private
      */
     _saveThreadScrollTop() {
+        if (!this._threadRef.comp || !this.chatWindow.threadViewer) {
+            return;
+        }
+        this.chatWindow.threadViewer.saveThreadCacheScrollHeightAsInitial(
+            this._threadRef.comp.getScrollHeight()
+        );
         this.chatWindow.threadViewer.saveThreadCacheScrollPositionsAsInitial(
             this._threadRef.comp.getScrollTop()
         );
@@ -167,20 +171,15 @@ class ChatWindow extends Component {
      * @param {Object} ui.item
      * @param {integer} ui.item.id
      */
-    _onAutocompleteSelect(ev, ui) {
-        const partnerId = ui.item.id;
-        const partner = this.env.models['mail.partner'].find(partner => partner.id === partnerId);
-        const chat = partner.correspondentThreads.find(thread => thread.channel_type === 'chat');
-        if (chat) {
-            chat.open({ chatWindowMode: 'from_new_message' });
-        } else {
-            this.env.models['mail.thread'].createChannel({
-                autoselect: true,
-                autoselectChatWindowMode: 'from_new_message',
-                partnerId,
-                type: 'chat',
-            });
+    async _onAutocompleteSelect(ev, ui) {
+        const chat = await this.env.messaging.getChat({ partnerId: ui.item.id });
+        if (!chat) {
+            return;
         }
+        this.env.messaging.chatWindowManager.openThread(chat, {
+            makeActive: true,
+            replaceNewMessage: true,
+        });
     }
 
     /**
@@ -225,6 +224,15 @@ class ChatWindow extends Component {
         if (this.chatWindow.isFocused) {
             return;
         }
+        if (isEventHandled(ev, 'Message.authorOpenChat')) {
+            return;
+        }
+        if (isEventHandled(ev, 'Message.authorOpenProfile')) {
+            return;
+        }
+        if (isEventHandled(ev, 'PartnerImStatusIcon.openChat')) {
+            return;
+        }
         this.chatWindow.focus();
     }
 
@@ -244,9 +252,7 @@ class ChatWindow extends Component {
             this.chatWindow.unfold();
             this.chatWindow.focus();
         } else {
-            if (this.chatWindow.thread) {
-                this._saveThreadScrollTop();
-            }
+            this._saveThreadScrollTop();
             this.chatWindow.fold();
         }
     }
@@ -272,12 +278,6 @@ class ChatWindow extends Component {
      * @private
      */
     _onFocusout() {
-        if (this._inputRef.comp) {
-            this._inputRef.comp.focusout();
-        }
-        if (this._threadRef.comp) {
-            this._threadRef.comp.focusout();
-        }
         if (!this.chatWindow) {
             // ignore focus out due to record being deleted
             return;
@@ -310,7 +310,7 @@ class ChatWindow extends Component {
                 }
                 break;
             case 'Escape':
-                if (isEventHandled(ev, 'ComposerTextInput.closeMentionSuggestions')) {
+                if (isEventHandled(ev, 'ComposerTextInput.closeSuggestions')) {
                     break;
                 }
                 if (isEventHandled(ev, 'Composer.closeEmojisPopover')) {
@@ -332,12 +332,7 @@ class ChatWindow extends Component {
      * @private
      */
     async _onWillHideHomeMenu() {
-        if (!this.chatWindow.thread) {
-            return;
-        }
-        if (!this.chatWindow.isFolded) {
-            this._saveThreadScrollTop();
-        }
+        this._saveThreadScrollTop();
     }
 
     /**
@@ -349,12 +344,7 @@ class ChatWindow extends Component {
      * @private
      */
     async _onWillShowHomeMenu() {
-        if (!this.chatWindow.thread) {
-            return;
-        }
-        if (!this.chatWindow.isFolded) {
-            this._saveThreadScrollTop();
-        }
+        this._saveThreadScrollTop();
     }
 
 }

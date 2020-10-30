@@ -28,9 +28,13 @@ $-editor-messages-margin-x: 2%;
     &:focus, &[data-oe-type] {
         min-height: 0.8em;
         min-width: 8px;
-    }
-    &.o_is_inline_editable {
-        display: inline-block;
+
+        // TODO this feature just needs to be reviewed to not have to make
+        // exceptions such as this
+        &#o_footer_scrolltop_wrapper {
+            min-height: 0;
+            min-width: 0;
+        }
     }
     .btn, &.btn {
         -webkit-user-select: auto;
@@ -39,7 +43,8 @@ $-editor-messages-margin-x: 2%;
         user-select: auto;
         cursor: text!important;
     }
-    /* Summernote not Support for placeholder text https://github.com/summernote/summernote/issues/581 */
+    /* The placeholder text will only be visible before the 1st edition,
+       after edition JW will add a br in empty boxes and break this selector */
     &[placeholder]:empty:not(:focus):before {
         content: attr(placeholder);
         opacity: 0.3;
@@ -147,20 +152,47 @@ table.editorbar-panel {
     }
 }
 
-// s_popup in edit mode
 body.editor_enable.editor_has_snippets {
+    padding-top: 0 !important;
+
     .s_popup .modal {
-        top: var(--o-we-toolbar-height);
+        // s_popup in edit mode
         background-color: transparent;
+
         &.fade .modal-dialog {
             transform: none;
         }
+    }
+
+    #oe_main_menu_navbar + #wrapwrap .o_header_affixed {
+        top: 0;
     }
 }
 
 .editor_has_snippets {
     .o_header_affixed {
-        left: $o-we-sidebar-width !important;
-        top: var(--o-we-toolbar-height) !important;
+        right: $o-we-sidebar-width !important;
+    }
+}
+
+.editor_enable {
+    @if o-website-value('header-template') == 'sidebar' {
+        #wrapwrap > header {
+            @if o-website-value('hamburger-position') != 'right' {
+                right: $o-we-sidebar-width;
+            }
+        }
+    }
+}
+
+//s_dynamic_snippet
+body.editor_enable {
+    .s_dynamic {
+        > * {
+            pointer-events: none;
+        }
+        [data-url] {
+            cursor: inherit;
+        }
     }
 }

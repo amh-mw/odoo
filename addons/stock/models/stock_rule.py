@@ -266,6 +266,7 @@ class StockRule(models.Model):
         date_scheduled = fields.Datetime.to_string(
             fields.Datetime.from_string(values['date_planned']) - relativedelta(days=self.delay or 0)
         )
+        date_deadline = values.get('date_deadline') and (fields.Datetime.to_datetime(values['date_deadline']) - relativedelta(days=self.delay or 0)) or False
         partner = self.partner_address_id or (values.get('group_id', False) and values['group_id'].partner_id)
         if partner:
             product_id = product_id.with_context(lang=partner.lang or self.env.user.lang)
@@ -298,7 +299,7 @@ class StockRule(models.Model):
             'route_ids': [(4, route.id) for route in values.get('route_ids', [])],
             'warehouse_id': self.propagate_warehouse_id.id or self.warehouse_id.id,
             'date': date_scheduled,
-            'date_deadline': values.get('date_deadline'),
+            'date_deadline': date_deadline,
             'propagate_cancel': self.propagate_cancel,
             'description_picking': picking_description,
             'priority': values.get('priority', "0"),
@@ -390,7 +391,7 @@ class ProcurementGroup(models.Model):
         actions_to_run = defaultdict(list)
         procurement_errors = []
         for procurement in procurements:
-            procurement.values.setdefault('company_id', self.env.company)
+            procurement.values.setdefault('company_id', procurement.location_id.company_id)
             procurement.values.setdefault('priority', '0')
             procurement.values.setdefault('date_planned', fields.Datetime.now())
             if (
@@ -460,7 +461,14 @@ class ProcurementGroup(models.Model):
 
     @api.model
     def _get_rule_domain(self, location, values):
-        return [('location_id', '=', location.id), ('action', '!=', 'push')]
+        domain = ['&', ('location_id', '=', location.id), ('action', '!=', 'push')]
+        # In case the method is called by the superuser, we need to restrict the rules to the
+        # ones of the company. This is not useful as a regular user since there is a record
+        # rule to filter out the rules based on the company.
+        if self.env.su and values.get('company_id'):
+            domain_company = ['|', ('company_id', '=', False), ('company_id', 'child_of', values['company_id'].ids)]
+            domain = expression.AND([domain, domain_company])
+        return domain
 
     def _merge_domain(self, values, rule, group_id):
         return [

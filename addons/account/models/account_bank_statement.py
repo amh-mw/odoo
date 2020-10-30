@@ -243,6 +243,7 @@ class AccountBankStatement(models.Model):
     is_valid_balance_start = fields.Boolean(string="Is Valid Balance Start", store=True,
         compute="_compute_is_valid_balance_start",
         help="Technical field to display a warning message in case starting balance is different than previous ending balance")
+    country_code = fields.Char(related='company_id.country_id.code')
 
     def write(self, values):
         res = super(AccountBankStatement, self).write(values)
@@ -253,11 +254,11 @@ class AccountBankStatement(models.Model):
             # by marking those record as needing to be recomputed.
             # Note that marking the field is not enough as we also have to recompute all its other fields that are depending on 'previous_statement_id'
             # hence the need to call modified afterwards.
-            to_recompute = self.search([('previous_statement_id', 'in', self.ids), ('id', 'not in', self.ids)])
+            to_recompute = self.search([('previous_statement_id', 'in', self.ids), ('id', 'not in', self.ids), ('journal_id', 'in', self.mapped('journal_id').ids)])
             if to_recompute:
                 self.env.add_to_compute(self._fields['previous_statement_id'], to_recompute)
                 to_recompute.modified(['previous_statement_id'])
-            next_statements_to_recompute = self.search([('previous_statement_id', 'in', [st.previous_statement_id.id for st in self]), ('id', 'not in', self.ids)])
+            next_statements_to_recompute = self.search([('previous_statement_id', 'in', [st.previous_statement_id.id for st in self]), ('id', 'not in', self.ids), ('journal_id', 'in', self.mapped('journal_id').ids)])
             if next_statements_to_recompute:
                 self.env.add_to_compute(self._fields['previous_statement_id'], next_statements_to_recompute)
                 next_statements_to_recompute.modified(['previous_statement_id'])
@@ -272,7 +273,7 @@ class AccountBankStatement(models.Model):
         # Note that marking the field is not enough as we also have to recompute all its other fields that are depending on 'previous_statement_id'
         # hence the need to call modified afterwards.
         # The reason we are doing this here and not in a compute field is that it is not easy to write dependencies for such field.
-        next_statements_to_recompute = self.search([('previous_statement_id', 'in', [st.previous_statement_id.id for st in res]), ('id', 'not in', res.ids)])
+        next_statements_to_recompute = self.search([('previous_statement_id', 'in', [st.previous_statement_id.id for st in res]), ('id', 'not in', res.ids), ('journal_id', 'in', res.journal_id.ids)])
         if next_statements_to_recompute:
             self.env.add_to_compute(self._fields['previous_statement_id'], next_statements_to_recompute)
             next_statements_to_recompute.modified(['previous_statement_id'])
@@ -336,7 +337,7 @@ class AccountBankStatement(models.Model):
             statement.line_ids.unlink()
             # Some other bank statements might be link to this one, so in that case we have to switch the previous_statement_id
             # from that statement to the one linked to this statement
-            next_statement = self.search([('previous_statement_id', '=', statement.id)])
+            next_statement = self.search([('previous_statement_id', '=', statement.id), ('journal_id', '=', statement.journal_id.id)])
             if next_statement:
                 next_statement.previous_statement_id = statement.previous_statement_id
         return super(AccountBankStatement, self).unlink()
@@ -772,9 +773,12 @@ class AccountBankStatementLine(models.Model):
             liquidity_lines, suspense_lines, other_lines = st_line._seek_for_lines()
 
             # Compute is_reconciled
-            if not st_line.id or suspense_lines:
+            if not st_line.id:
                 # New record: The journal items are not yet there.
                 st_line.is_reconciled = False
+            elif suspense_lines:
+                # In case of the statement line comes from an older version, it could have a residual amount of zero.
+                st_line.is_reconciled = all(suspense_line.reconciled for suspense_line in suspense_lines)
             elif st_line.currency_id.is_zero(st_line.amount):
                 st_line.is_reconciled = True
             else:

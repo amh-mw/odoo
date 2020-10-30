@@ -3,7 +3,11 @@ odoo.define('mail/static/src/components/attachment/attachment.js', function (req
 
 const useStore = require('mail/static/src/component_hooks/use_store/use_store.js');
 
-const { Component } = owl;
+const components = {
+    AttachmentDeleteConfirmDialog: require('mail/static/src/components/attachment_delete_confirm_dialog/attachment_delete_confirm_dialog.js'),
+};
+
+const { Component, useState } = owl;
 
 class Attachment extends Component {
 
@@ -17,6 +21,9 @@ class Attachment extends Component {
             return {
                 attachment: attachment ? attachment.__state : undefined,
             };
+        });
+        this.state = useState({
+            hasDeleteConfirmDialog: false,
         });
     }
 
@@ -71,6 +78,12 @@ class Attachment extends Component {
         if (this.attachment.fileType !== 'image') {
             return '';
         }
+        if (this.env.isQUnitTest) {
+            // background-image:url is hardly mockable, and attachments in
+            // QUnit tests do not actually exist in DB, so style should not
+            // be fetched at all.
+            return '';
+        }
         let size;
         if (this.detailsMode === 'card') {
             size = '38x38';
@@ -92,7 +105,7 @@ class Attachment extends Component {
      */
     _onClickDownload(ev) {
         ev.stopPropagation();
-        window.location = `/web/content/ir.attachment/${this.attachment.id}/datas?download=true`;
+        this.env.services.navigate(`/web/content/ir.attachment/${this.attachment.id}/datas`, { download: true });
     }
 
     /**
@@ -119,13 +132,24 @@ class Attachment extends Component {
      */
     _onClickUnlink(ev) {
         ev.stopPropagation();
-        this.attachment.remove();
-        this.trigger('o-attachment-removed');
+        if (this.attachment.isLinkedToComposer) {
+            this.attachment.remove();
+            this.trigger('o-attachment-removed', { attachmentLocalId: this.props.attachmentLocalId });
+        } else {
+            this.state.hasDeleteConfirmDialog = true;
+        }
     }
 
+   /**
+    * @private
+    */
+    _onDeleteConfirmDialogClosed() {
+        this.state.hasDeleteConfirmDialog = false;
+    }
 }
 
 Object.assign(Attachment, {
+    components,
     defaultProps: {
         attachmentLocalIds: [],
         detailsMode: 'auto',

@@ -159,7 +159,7 @@ class EventEvent(models.Model):
         store=True, readonly=True, compute='_compute_seats')
     seats_expected = fields.Integer(
         string='Number of Expected Attendees',
-        compute_sudo=True, readonly=True, compute='_compute_seats')
+        compute_sudo=True, readonly=True, compute='_compute_seats_expected')
     # Registration fields
     auto_confirm = fields.Boolean(
         string='Autoconfirmation', compute='_compute_from_event_type', readonly=False, store=True,
@@ -170,13 +170,16 @@ class EventEvent(models.Model):
         compute='_compute_event_ticket_ids', readonly=False, store=True)
     event_registrations_open = fields.Boolean(
         'Registration open', compute='_compute_event_registrations_open', compute_sudo=True,
-        help='Registrations are open if event is not ended, seats are available on event and if tickets are sellable if ticketing is used.')
+        help="Registrations are open if:\n"
+        "- the event is not ended\n"
+        "- there are seats available on event\n"
+        "- the tickets are sellable (if ticketing is used)")
     event_registrations_sold_out = fields.Boolean(
         'Sold Out', compute='_compute_event_registrations_sold_out', compute_sudo=True,
-        help='Event is sold out if no more seats are available on event. If ticketing is used and all tickets are sold out event is sold out.')
+        help='The event is sold out if no more seats are available on event. If ticketing is used and all tickets are sold out, the event will be sold out.')
     start_sale_date = fields.Date(
         'Start sale date', compute='_compute_start_sale_date',
-        help='If ticketing is used, this is the lowest starting sale date of tickets.')
+        help='If ticketing is used, contains the earliest starting sale date of tickets.')
     # Date fields
     date_tz = fields.Selection(
         _tz_get, string='Timezone', required=True,
@@ -241,8 +244,11 @@ class EventEvent(models.Model):
             event.update(results.get(event._origin.id or event.id, base_vals))
             if event.seats_max > 0:
                 event.seats_available = event.seats_max - (event.seats_reserved + event.seats_used)
-            seats_expected = event.seats_unconfirmed + event.seats_reserved + event.seats_used
-            event.seats_expected = seats_expected
+
+    @api.depends('seats_unconfirmed', 'seats_reserved', 'seats_used')
+    def _compute_seats_expected(self):
+        for event in self:
+            event.seats_expected = event.seats_unconfirmed + event.seats_reserved + event.seats_used
 
     @api.depends('date_tz', 'start_sale_date', 'date_end', 'seats_available', 'seats_limited', 'event_ticket_ids.sale_available')
     def _compute_event_registrations_open(self):

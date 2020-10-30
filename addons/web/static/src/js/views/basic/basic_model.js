@@ -1515,7 +1515,9 @@ var BasicModel = AbstractModel.extend({
         }
 
         if (options.notifyChange === false) {
-            return Promise.resolve(_.keys(changes));
+            return Promise.all(defs).then(function () {
+                return Promise.resolve(_.keys(changes));
+            });
         }
 
         return Promise.all(defs).then(function () {
@@ -1581,7 +1583,8 @@ var BasicModel = AbstractModel.extend({
 
         const field = record.fields[fieldName];
         const coModel = field.type === 'reference' ? data.model : field.relation;
-        if (field.type === 'many2one' && !data.id && data.display_name) {
+        const allowedTypes = ['many2one', 'reference'];
+        if (allowedTypes.includes(field.type) && !data.id && data.display_name) {
             // only display_name given -> do a name_create
             const result = await this._rpc({
                 model: coModel,
@@ -2623,7 +2626,7 @@ var BasicModel = AbstractModel.extend({
         var toFetch = {};
         _.each(list.data, function (groupIndex) {
             var group = self.localData[groupIndex];
-            _.extend(toFetch, self._getDataToFetchByModel(group, fieldName));
+            self._getDataToFetchByModel(group, fieldName, toFetch);
         });
 
         var defs = [];
@@ -3498,13 +3501,18 @@ var BasicModel = AbstractModel.extend({
      *
      * @param {Object} list a valid resource object
      * @param {string} fieldName
+     * @param {Object} [toFetchAcc] an object to store fetching data. Used when
+     *  batching reference across multiple groups.
+     *    [modelName: string]: {
+     *        [recordId: number]: datapointId[]
+     *    }
      * @returns {Object} each key represent a model and contain a sub-object
      * where each key represent an id (res_id) containing an array of
      * webclient id (referred to a datapoint, so not a res_id).
      */
-    _getDataToFetchByModel: function (list, fieldName) {
+    _getDataToFetchByModel: function (list, fieldName, toFetchAcc) {
         var self = this;
-        var toFetch = {};
+        var toFetch = toFetchAcc || {};
         _.each(list.data, function (dataPoint) {
             var record = self.localData[dataPoint];
             var value = record.data[fieldName];
@@ -4602,6 +4610,14 @@ var BasicModel = AbstractModel.extend({
                             // sub-groups
                             // Also keep data if we only reload groups' own data
                             updatedProps.data = oldGroup.data;
+                            if (options.onlyGroups) {
+                                // keep count and res_ids as in this case the group
+                                // won't be search_read again. This situation happens
+                                // when using kanban quick_create where the record is manually
+                                // added to the datapoint before getting here.
+                                updatedProps.res_ids = oldGroup.res_ids;
+                                updatedProps.count = oldGroup.count;
+                            }
                         }
                         _.extend(newGroup, updatedProps);
                         // set the limit such that all previously loaded records

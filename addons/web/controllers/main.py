@@ -18,7 +18,6 @@ import os
 import re
 import sys
 import tempfile
-import time
 
 import werkzeug
 import werkzeug.exceptions
@@ -39,7 +38,7 @@ from odoo.tools import image_process, topological_sort, html_escape, pycompat, u
 from odoo.tools.mimetypes import guess_mimetype
 from odoo.tools.translate import _
 from odoo.tools.misc import str2bool, xlsxwriter, file_open
-from odoo.tools.safe_eval import safe_eval
+from odoo.tools.safe_eval import safe_eval, time
 from odoo import http, tools
 from odoo.http import content_disposition, dispatch_rpc, request, serialize_exception as _serialize_exception, Response
 from odoo.exceptions import AccessError, UserError, AccessDenied
@@ -1554,7 +1553,7 @@ class Binary(http.Controller):
         try:
             data = ufile.read()
             args = [len(data), ufile.filename,
-                    ufile.content_type, base64.b64encode(data)]
+                    ufile.content_type, pycompat.to_text(base64.b64encode(data))]
         except Exception as e:
             args = [False, str(e)]
         return out % (json.dumps(callback), json.dumps(args)) if callback else json.dumps(args)
@@ -2081,6 +2080,7 @@ class ReportController(http.Controller):
         """
         requestcontent = json.loads(data)
         url, type = requestcontent[0], requestcontent[1]
+        reportname = '???'
         try:
             if type in ['qweb-pdf', 'qweb-text']:
                 converter = 'pdf' if type == 'qweb-pdf' else 'text'
@@ -2119,6 +2119,7 @@ class ReportController(http.Controller):
             else:
                 return
         except Exception as e:
+            _logger.exception("Error while generating report %s", reportname)
             se = _serialize_exception(e)
             error = {
                 'code': 200,

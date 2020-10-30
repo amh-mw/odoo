@@ -3,6 +3,7 @@
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
+from odoo.osv.expression import AND, NEGATIVE_TERM_OPERATORS
 from odoo.tools import float_round
 
 from itertools import groupby
@@ -89,8 +90,12 @@ class MrpBom(models.Model):
     def _check_bom_lines(self):
         for bom in self:
             for bom_line in bom.bom_line_ids:
-                if bom.product_id and bom_line.product_id == bom.product_id:
-                    raise ValidationError(_("BoM line product %s should not be the same as BoM product.", bom.display_name))
+                if bom.product_id:
+                    same_product = bom.product_id == bom_line.product_id
+                else:
+                    same_product = bom.product_tmpl_id == bom_line.product_id.product_tmpl_id
+                if same_product:
+                    raise ValidationError(_("BoM line product %s should not be the same as BoM product.") % bom.display_name)
                 if bom.product_id and bom_line.bom_product_template_attribute_value_ids:
                     raise ValidationError(_("BoM cannot concern product %s and have a line with attributes (%s) at the same time.")
                         % (bom.product_id.display_name, ", ".join([ptav.display_name for ptav in bom_line.bom_product_template_attribute_value_ids])))
@@ -144,6 +149,16 @@ class MrpBom(models.Model):
         if self.env['mrp.production'].search([('bom_id', 'in', self.ids), ('state', 'not in', ['done', 'cancel'])], limit=1):
             raise UserError(_('You can not delete a Bill of Material with running manufacturing orders.\nPlease close or cancel it first.'))
         return super(MrpBom, self).unlink()
+
+    @api.model
+    def _name_search(self, name='', args=None, operator='ilike', limit=100, name_get_uid=None):
+        args = args or []
+        domain = []
+        if (name or '').strip():
+            domain = ['|', (self._rec_name, operator, name), ('code', operator, name)]
+            if operator in NEGATIVE_TERM_OPERATORS:
+                domain = domain[1:]
+        return self._search(AND([domain, args]), limit=limit, access_rights_uid=name_get_uid)
 
     @api.model
     def _bom_find_domain(self, product_tmpl=None, product=None, picking_type=None, company_id=False, bom_type=False):

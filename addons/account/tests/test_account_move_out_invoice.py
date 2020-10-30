@@ -6,6 +6,7 @@ from odoo import fields
 from odoo.exceptions import UserError
 
 from unittest.mock import patch
+from datetime import timedelta
 
 
 @tagged('post_install', '-at_install')
@@ -15,7 +16,7 @@ class TestAccountMoveOutInvoiceOnchanges(AccountTestInvoicingCommon):
     def setUpClass(cls, chart_template_ref=None):
         super().setUpClass(chart_template_ref=chart_template_ref)
 
-        cls.invoice = cls.init_invoice('out_invoice')
+        cls.invoice = cls.init_invoice('out_invoice', products=cls.product_a+cls.product_b)
 
         cls.product_line_vals_1 = {
             'name': cls.product_a.name,
@@ -772,7 +773,7 @@ class TestAccountMoveOutInvoiceOnchanges(AccountTestInvoicingCommon):
                 'debit': 0.0,
                 'credit': 120.0,
                 'date_maturity': False,
-                'tax_exigible': True,
+                'tax_exigible': False,
             },
             {
                 'name': child_tax_1.name,
@@ -792,7 +793,7 @@ class TestAccountMoveOutInvoiceOnchanges(AccountTestInvoicingCommon):
                 'debit': 0.0,
                 'credit': 80.0,
                 'date_maturity': False,
-                'tax_exigible': True,
+                'tax_exigible': False,
             },
             {
                 'name': child_tax_2.name,
@@ -1318,6 +1319,33 @@ class TestAccountMoveOutInvoiceOnchanges(AccountTestInvoicingCommon):
             },
         ], self.move_vals)
 
+    def test_out_invoice_line_onchange_analytic_2(self):
+        self.env.user.groups_id += self.env.ref('analytic.group_analytic_accounting')
+
+        analytic_account = self.env['account.analytic.account'].create({
+            'name': 'test_analytic_account1',
+            'code': 'TEST1'
+        })
+
+        self.invoice.write({'invoice_line_ids': [(1, self.invoice.invoice_line_ids.ids[0], {
+            'analytic_account_id': analytic_account.id,
+        })]})
+
+        self.assertRecordValues(self.invoice.invoice_line_ids, [
+            {'analytic_account_id': analytic_account.id},
+            {'analytic_account_id': False},
+        ])
+
+        # We can remove the analytic account, it is not recomputed by an invalidation
+        self.invoice.write({'invoice_line_ids': [(1, self.invoice.invoice_line_ids.ids[0], {
+            'analytic_account_id': False,
+        })]})
+
+        self.assertRecordValues(self.invoice.invoice_line_ids, [
+            {'analytic_account_id': False},
+            {'analytic_account_id': False},
+        ])
+
     def test_out_invoice_line_onchange_cash_rounding_1(self):
         move_form = Form(self.invoice)
         # Add a cash rounding having 'add_invoice_line'.
@@ -1840,6 +1868,22 @@ class TestAccountMoveOutInvoiceOnchanges(AccountTestInvoicingCommon):
             'payment_state': 'paid',
         })
 
+    def test_out_invoice_create_refund_auto_post(self):
+        self.invoice.action_post()
+
+        move_reversal = self.env['account.move.reversal'].with_context(active_model="account.move", active_ids=self.invoice.ids).create({
+            'date': fields.Date.today() + timedelta(days=7),
+            'reason': 'no reason',
+            'refund_method': 'modify',
+        })
+        move_reversal.reverse_moves()
+        refund = self.env['account.move'].search([('move_type', '=', 'out_refund'), ('company_id', '=', self.invoice.company_id.id)])
+
+        self.assertRecordValues(refund, [{
+            'state': 'draft',
+            'auto_post': True,
+        }])
+
     def test_out_invoice_create_1(self):
         # Test creating an account_move with the least information.
         move = self.env['account.move'].create({
@@ -1901,6 +1945,28 @@ class TestAccountMoveOutInvoiceOnchanges(AccountTestInvoicingCommon):
             **self.move_vals,
             'currency_id': self.currency_data['currency'].id,
         })
+
+    def test_out_invoice_create_child_partner(self):
+        # Test creating an account_move on a child partner.
+        # This needs to attach the lines to the parent partner id.
+        partner_a_child = self.env['res.partner'].create({
+            'name': 'partner_a_child',
+            'parent_id': self.partner_a.id
+        })
+        move = self.env['account.move'].create({
+            'move_type': 'out_invoice',
+            'partner_id': partner_a_child.id,
+            'invoice_date': fields.Date.from_string('2019-01-01'),
+            'currency_id': self.currency_data['currency'].id,
+            'invoice_payment_term_id': self.pay_terms_a.id,
+            'invoice_line_ids': [
+                (0, None, self.product_line_vals_1),
+                (0, None, self.product_line_vals_2),
+            ]
+        })
+
+        self.assertEqual(partner_a_child.id, move.partner_id.id, 'Keep child partner on the account move record')
+        self.assertEqual(self.partner_a.id, move.line_ids[0].partner_id.id, 'Set parent partner on the account move line records')
 
     def test_out_invoice_write_1(self):
         # Test creating an account_move with the least information.
@@ -2667,3 +2733,13 @@ class TestAccountMoveOutInvoiceOnchanges(AccountTestInvoicingCommon):
         invoice_onchange = move_form.save()
 
         _check_invoice_values(invoice_onchange)
+
+    def test_out_invoice_multiple_switch_payment_terms(self):
+        ''' When switching immediate payment term to 30% advance then back to immediate payment term, ensure the
+        receivable line is back to its previous value. If some business fields are not well updated, it could lead to a
+        recomputation of debit/credit when writing and then, an unbalanced journal entry.
+        '''
+        # assertNotUnbalancedEntryWhenSaving
+        with Form(self.invoice) as move_form:
+            move_form.invoice_payment_term_id = self.pay_terms_b    # Switch to 30% in advance payment terms
+            move_form.invoice_payment_term_id = self.pay_terms_a    # Back to immediate payment term

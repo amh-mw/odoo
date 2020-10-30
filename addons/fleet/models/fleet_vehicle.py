@@ -58,7 +58,7 @@ class FleetVehicle(models.Model):
     location = fields.Char(help='Location of the vehicle (garage, ...)')
     seats = fields.Integer('Seats Number', help='Number of seats of the vehicle')
     model_year = fields.Char('Model Year', help='Year of the model')
-    doors = fields.Integer('Doors Number', help='Number of doors of the vehicle', default=5)
+    doors = fields.Integer('Doors Number', help='Number of doors of the vehicle', compute="_compute_doors", store=True, readonly=True)
     tag_ids = fields.Many2many('fleet.vehicle.tag', 'fleet_vehicle_vehicle_tag_rel', 'vehicle_tag_id', 'tag_id', 'Tags', copy=False)
     odometer = fields.Float(compute='_get_odometer', inverse='_set_odometer', string='Last Odometer',
         help='Odometer measure of the vehicle at the moment of this log')
@@ -72,7 +72,12 @@ class FleetVehicle(models.Model):
         ('diesel', 'Diesel'),
         ('lpg', 'LPG'),
         ('electric', 'Electric'),
-        ('hybrid', 'Hybrid')
+        ('hybrid', 'Hybrid'),
+        ('plug_in_hybrid_diesel', 'Plug-in Hybrid Diesel'),
+        ('plug_in_hybrid_gasoline', 'Plug-in Hybrid Gasoline'),
+        ('full_hybrid_gasoline', 'Full Hybrid Gasoline'),
+        ('cng', 'CNG'),
+        ('hydrogen', 'Hydrogen'),
         ], 'Fuel Type', help='Fuel Used by the vehicle')
     horsepower = fields.Integer()
     horsepower_tax = fields.Float('Horsepower Taxation')
@@ -89,7 +94,16 @@ class FleetVehicle(models.Model):
     net_car_value = fields.Float(string="Purchase Value", help="Purchase value of the vehicle")
     residual_value = fields.Float()
     plan_to_change_car = fields.Boolean(related='driver_id.plan_to_change_car', store=True, readonly=False)
+    plan_to_change_bike = fields.Boolean(related='driver_id.plan_to_change_bike', store=True, readonly=False)
     vehicle_type = fields.Selection(related='model_id.vehicle_type')
+    frame_type = fields.Selection([('diamant', 'Diamant'), ('trapez', 'Trapez'), ('wave', 'Wave')], help="Frame type of the bike")
+    electric_assistance = fields.Boolean()
+    frame_size = fields.Float()
+
+    @api.depends('vehicle_type')
+    def _compute_doors(self):
+        for record in self:
+            record.doors = 5 if record.model_id.vehicle_type == 'car' else 0
 
     @api.depends('model_id.brand_id.name', 'model_id.name', 'license_plate')
     def _compute_vehicle_name(self):
@@ -200,7 +214,12 @@ class FleetVehicle(models.Model):
 
     @api.model
     def create(self, vals):
+        # Fleet administrator may not have rights to create the plan_to_change_car value when the driver_id is a res.user
+        # This trick is used to prevent access right error.
+        ptc_value = 'plan_to_change_car' in vals.keys() and {'plan_to_change_car': vals.pop('plan_to_change_car')}
         res = super(FleetVehicle, self).create(vals)
+        if ptc_value:
+            res.sudo().write(ptc_value)
         if 'driver_id' in vals and vals['driver_id']:
             res.create_driver_history(vals['driver_id'])
         if 'future_driver_id' in vals and vals['future_driver_id']:
@@ -208,7 +227,10 @@ class FleetVehicle(models.Model):
             states = res.mapped('state_id').ids
             if not state_waiting_list or state_waiting_list.id not in states:
                 future_driver = self.env['res.partner'].browse(vals['future_driver_id'])
-                future_driver.sudo().write({'plan_to_change_car': True})
+                if self.vehicle_type == 'bike':
+                    future_driver.sudo().write({'plan_to_change_bike': True})
+                if self.vehicle_type == 'car':
+                    future_driver.sudo().write({'plan_to_change_car': True})
         return res
 
     def write(self, vals):
@@ -221,7 +243,10 @@ class FleetVehicle(models.Model):
             states = self.mapped('state_id').ids if 'state_id' not in vals else [vals['state_id']]
             if not state_waiting_list or state_waiting_list.id not in states:
                 future_driver = self.env['res.partner'].browse(vals['future_driver_id'])
-                future_driver.sudo().write({'plan_to_change_car': True})
+                if self.vehicle_type == 'bike':
+                    future_driver.sudo().write({'plan_to_change_bike': True})
+                if self.vehicle_type == 'car':
+                    future_driver.sudo().write({'plan_to_change_car': True})
 
         res = super(FleetVehicle, self).write(vals)
         if 'active' in vals and not vals['active']:
@@ -252,7 +277,10 @@ class FleetVehicle(models.Model):
         vehicles._close_driver_history()
 
         for vehicle in self:
-            vehicle.future_driver_id.sudo().write({'plan_to_change_car': False})
+            if vehicle.vehicle_type == 'bike':
+                vehicle.future_driver_id.sudo().write({'plan_to_change_bike': False})
+            if vehicle.vehicle_type == 'car':
+                vehicle.future_driver_id.sudo().write({'plan_to_change_car': False})
             vehicle.driver_id = vehicle.future_driver_id
             vehicle.future_driver_id = False
 

@@ -1,10 +1,12 @@
 odoo.define('mail/static/src/widgets/form_renderer/form_renderer_tests.js', function (require) {
 "use strict";
 
+const { makeDeferred } = require('mail/static/src/utils/deferred/deferred.js');
 const {
     afterEach,
     afterNextRender,
     beforeEach,
+    nextAnimationFrame,
     start,
 } = require('mail/static/src/utils/test_utils.js');
 
@@ -47,6 +49,223 @@ QUnit.module('form_renderer_tests.js', {
     afterEach() {
         afterEach(this);
     },
+});
+
+QUnit.test('[technical] spinner when messaging is not created', async function (assert) {
+    /**
+     * Creation of messaging in env is async due to generation of models being
+     * async. Generation of models is async because it requires parsing of all
+     * JS modules that contain pieces of model definitions.
+     *
+     * Time of having no messaging is very short, almost imperceptible by user
+     * on UI, but the display should not crash during this critical time period.
+     */
+    assert.expect(3);
+
+    this.data['res.partner'].records.push({
+        display_name: "second partner",
+        id: 12,
+    });
+    await this.createView({
+        data: this.data,
+        hasView: true,
+        messagingBeforeCreationDeferred: makeDeferred(), // block messaging creation
+        waitUntilMessagingCondition: 'none',
+        // View params
+        View: FormView,
+        model: 'res.partner',
+        arch: `
+            <form string="Partners">
+                <sheet>
+                    <field name="name"/>
+                </sheet>
+                <div class="oe_chatter"></div>
+            </form>
+        `,
+        res_id: 12,
+    });
+    assert.containsOnce(
+        document.body,
+        '.o_ChatterContainer',
+        "should display chatter container even when messaging is not created yet"
+    );
+    assert.containsOnce(
+        document.body,
+        '.o_ChatterContainer_noChatter',
+        "chatter container should not display any chatter when messaging not created"
+    );
+    assert.strictEqual(
+        document.querySelector('.o_ChatterContainer').textContent,
+        "Please wait...",
+        "chatter container should display spinner when messaging not yet created"
+    );
+});
+
+QUnit.test('[technical] keep spinner on transition from messaging non-created to messaging created (and non-initialized)', async function (assert) {
+    /**
+     * Creation of messaging in env is async due to generation of models being
+     * async. Generation of models is async because it requires parsing of all
+     * JS modules that contain pieces of model definitions.
+     *
+     * Time of having no messaging is very short, almost imperceptible by user
+     * on UI, but the display should not crash during this critical time period.
+     */
+    assert.expect(4);
+
+    const messagingBeforeCreationDeferred = makeDeferred();
+    this.data['res.partner'].records.push({
+        display_name: "second partner",
+        id: 12,
+    });
+    await this.createView({
+        data: this.data,
+        hasView: true,
+        messagingBeforeCreationDeferred,
+        async mockRPC(route, args) {
+            const _super = this._super.bind(this, ...arguments); // limitation of class.js
+            if (route === '/mail/init_messaging') {
+                await new Promise(() => {}); // simulate messaging never initialized
+            }
+            return _super();
+        },
+        waitUntilMessagingCondition: 'none',
+        // View params
+        View: FormView,
+        model: 'res.partner',
+        arch: `
+            <form string="Partners">
+                <sheet>
+                    <field name="name"/>
+                </sheet>
+                <div class="oe_chatter"></div>
+            </form>
+        `,
+        res_id: 12,
+    });
+    assert.strictEqual(
+        document.querySelector('.o_ChatterContainer').textContent,
+        "Please wait...",
+        "chatter container should display spinner when messaging not yet created"
+    );
+    assert.containsOnce(
+        document.body,
+        '.o_ChatterContainer_noChatter',
+        "chatter container should not display any chatter when messaging not created"
+    );
+
+    // simulate messaging become created
+    messagingBeforeCreationDeferred.resolve();
+    await nextAnimationFrame();
+    assert.strictEqual(
+        document.querySelector('.o_ChatterContainer').textContent,
+        "Please wait...",
+        "chatter container should still display spinner when messaging is created but not initialized"
+    );
+    assert.containsOnce(
+        document.body,
+        '.o_ChatterContainer_noChatter',
+        "chatter container should still not display any chatter when messaging not initialized"
+    );
+});
+
+QUnit.test('spinner when messaging is created but not initialized', async function (assert) {
+    assert.expect(3);
+
+    this.data['res.partner'].records.push({
+        display_name: "second partner",
+        id: 12,
+    });
+    await this.createView({
+        data: this.data,
+        hasView: true,
+        async mockRPC(route, args) {
+            const _super = this._super.bind(this, ...arguments); // limitation of class.js
+            if (route === '/mail/init_messaging') {
+                await new Promise(() => {}); // simulate messaging never initialized
+            }
+            return _super();
+        },
+        waitUntilMessagingCondition: 'created',
+        // View params
+        View: FormView,
+        model: 'res.partner',
+        arch: `
+            <form string="Partners">
+                <sheet>
+                    <field name="name"/>
+                </sheet>
+                <div class="oe_chatter"></div>
+            </form>
+        `,
+        res_id: 12,
+    });
+    assert.containsOnce(
+        document.body,
+        '.o_ChatterContainer',
+        "should display chatter container even when messaging is not fully initialized"
+    );
+    assert.containsOnce(
+        document.body,
+        '.o_ChatterContainer_noChatter',
+        "chatter container should not display any chatter when messaging not initialized"
+    );
+    assert.strictEqual(
+        document.querySelector('.o_ChatterContainer').textContent,
+        "Please wait...",
+        "chatter container should display spinner when messaging not yet initialized"
+    );
+});
+
+QUnit.test('transition non-initialized messaging to initialized messaging: display spinner then chatter', async function (assert) {
+    assert.expect(3);
+
+    const messagingBeforeInitializationDeferred = makeDeferred();
+    this.data['res.partner'].records.push({
+        display_name: "second partner",
+        id: 12,
+    });
+    await this.createView({
+        data: this.data,
+        hasView: true,
+        async mockRPC(route, args) {
+            const _super = this._super.bind(this, ...arguments); // limitation of class.js
+            if (route === '/mail/init_messaging') {
+                await messagingBeforeInitializationDeferred;
+            }
+            return _super();
+        },
+        waitUntilMessagingCondition: 'created',
+        // View params
+        View: FormView,
+        model: 'res.partner',
+        arch: `
+            <form string="Partners">
+                <sheet>
+                    <field name="name"/>
+                </sheet>
+                <div class="oe_chatter"></div>
+            </form>
+        `,
+        res_id: 12,
+    });
+    assert.strictEqual(
+        document.querySelector('.o_ChatterContainer').textContent,
+        "Please wait...",
+        "chatter container should display spinner when messaging not yet initialized"
+    );
+    assert.containsOnce(
+        document.body,
+        '.o_ChatterContainer_noChatter',
+        "chatter container should not display any chatter when messaging not initialized"
+    );
+
+    // Simulate messaging becomes initialized
+    await afterNextRender(() => messagingBeforeInitializationDeferred.resolve());
+    assert.containsNone(
+        document.body,
+        '.o_ChatterContainer_noChatter',
+        "chatter container should now display chatter when messaging becomes initialized"
+    );
 });
 
 QUnit.test('basic chatter rendering', async function (assert) {
@@ -244,14 +463,22 @@ QUnit.test('basic chatter rendering without messages', async function (assert) {
 QUnit.test('chatter updating', async function (assert) {
     assert.expect(3);
 
-    this.data['mail.message'].records.push({ model: 'res.partner', res_id: 12 });
+    this.data['mail.message'].records.push({ body: "not empty", model: 'res.partner', res_id: 12 });
     this.data['res.partner'].records.push(
         { display_name: "first partner", id: 11 },
         { display_name: "second partner", id: 12 }
     );
+    const messageFetchChannelDef = makeDeferred();
     await this.createView({
         data: this.data,
         hasView: true,
+        async mockRPC(route, args) {
+            const res = await this._super(...arguments);
+            if (route.includes('message_fetch')) {
+                messageFetchChannelDef.resolve();
+            }
+            return res;
+        },
         // View params
         View: FormView,
         model: 'res.partner',
@@ -282,8 +509,10 @@ QUnit.test('chatter updating', async function (assert) {
         "there should be no message"
     );
 
-    await afterNextRender(() => {
+    await afterNextRender(async () => {
         document.querySelector('.o_pager_next').click();
+        // wait until messages are fetched, ignore other renders that are too early
+        await messageFetchChannelDef;
     });
     assert.containsOnce(
         document.body,
@@ -520,9 +749,7 @@ QUnit.test('read more links becomes read less after being clicked', async functi
         "read more/less link should contain 'read more' as text"
     );
 
-    await afterNextRender(() => {
-        document.querySelector('.o_Message_readMoreLess').click();
-    });
+    document.querySelector('.o_Message_readMoreLess').click();
     assert.strictEqual(
         document.querySelector('.o_Message_readMoreLess').textContent,
         'read less',
@@ -594,15 +821,15 @@ QUnit.test('Form view not scrolled when switching record', async function (asser
     );
 
     await afterNextRender(async () => {
-        controllerContentEl.scrollTop = controllerContentEl.scrollHeight - controllerContentEl.offsetHeight;
+        controllerContentEl.scrollTop = controllerContentEl.scrollHeight - controllerContentEl.clientHeight;
         await triggerEvent(
-            document.querySelector('.o_ThreadViewer_messageList'),
+            document.querySelector('.o_ThreadView_messageList'),
             'scroll'
         );
     });
     assert.strictEqual(
         controllerContentEl.scrollTop,
-        controllerContentEl.scrollHeight - controllerContentEl.offsetHeight,
+        controllerContentEl.scrollHeight - controllerContentEl.clientHeight,
         "The controller container should be scrolled to its bottom"
     );
 
@@ -623,6 +850,109 @@ QUnit.test('Form view not scrolled when switching record', async function (asser
     );
     assert.strictEqual(controllerContentEl.scrollTop, 0,
         "Form view's scroll position should have been reset when switching back to first record"
+    );
+});
+
+QUnit.test('Attachments that have been unlinked from server should be visually unlinked from record', async function (assert) {
+    // Attachments that have been fetched from a record at certain time and then
+    // removed from the server should be reflected on the UI when the current
+    // partner accesses this record again.
+    assert.expect(2);
+
+    this.data['res.partner'].records.push(
+        { display_name: "Partner1", id: 11 },
+        { display_name: "Partner2", id: 12 }
+    );
+    this.data['ir.attachment'].records.push(
+        {
+           id: 11,
+           mimetype: 'text.txt',
+           res_id: 11,
+           res_model: 'res.partner',
+        },
+        {
+           id: 12,
+           mimetype: 'text.txt',
+           res_id: 11,
+           res_model: 'res.partner',
+        }
+    );
+    await this.createView({
+        data: this.data,
+        hasView: true,
+        // View params
+        View: FormView,
+        model: 'res.partner',
+        res_id: 11,
+        viewOptions: {
+            ids: [11, 12],
+            index: 0,
+        },
+        arch: `
+            <form string="Partners">
+                <sheet>
+                    <field name="name"/>
+                </sheet>
+                <div class="oe_chatter">
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        `,
+    });
+    assert.strictEqual(
+        document.querySelector('.o_ChatterTopbar_buttonCount').textContent,
+        '2',
+        "Partner1 should have 2 attachments initially"
+    );
+
+    // The attachment links are updated on (re)load,
+    // so using pager is a way to reload the record "Partner1".
+    await afterNextRender(() =>
+        document.querySelector('.o_pager_next').click()
+    );
+    // Simulate unlinking attachment 12 from Partner 1.
+    this.data['ir.attachment'].records.find(a => a.id === 11).res_id = 0;
+    await afterNextRender(() =>
+        document.querySelector('.o_pager_previous').click()
+    );
+    assert.strictEqual(
+        document.querySelector('.o_ChatterTopbar_buttonCount').textContent,
+        '1',
+        "Partner1 should now have 1 attachment after it has been unlinked from server"
+    );
+});
+
+QUnit.test('chatter just contains "creating a new record" message during the creation of a new record after having displayed a chatter for an existing record', async function (assert) {
+    assert.expect(2);
+
+    this.data['res.partner'].records.push({ id: 12 });
+    await this.createView({
+        data: this.data,
+        hasView: true,
+        View: FormView,
+        model: 'res.partner',
+        res_id: 12,
+        arch: `
+            <form>
+                <div class="oe_chatter">
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        `,
+    });
+
+    await afterNextRender(() => {
+        document.querySelector('.o_form_button_create').click();
+    });
+    assert.containsOnce(
+        document.body,
+        '.o_Message',
+        "Should have a single message when creating a new record"
+    );
+    assert.strictEqual(
+        document.querySelector('.o_Message_content').textContent,
+        'Creating a new record...',
+        "the message content should be in accord to the creation of this record"
     );
 });
 
