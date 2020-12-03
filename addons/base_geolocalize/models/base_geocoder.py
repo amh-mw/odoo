@@ -100,6 +100,16 @@ class GeoCoder(models.AbstractModel):
 
     @api.model
     def _call_googlemap(self, addr, **kw):
+        results = self._call_googlemap_api(addr, **kw)
+        try:
+            geo = results[0]['geometry']['location']
+            return float(geo['lat']), float(geo['lng'])
+        except (KeyError, ValueError):
+            _logger.debug('Unable to determine coordinates from Google Maps API answer.')
+            return None
+
+    @api.model
+    def _call_googlemap_api(self, addr, **kw):
         """ Use google maps API. It won't work without a valid API key.
         :return: (latitude, longitude) or None if not found
         """
@@ -130,8 +140,7 @@ class GeoCoder(models.AbstractModel):
                               'Then, go to Developer Console, and enable the APIs:\n'
                               'Geocoding, Maps Static, Maps Javascript.\n') % result.get('error_message')
                 raise UserError(error_msg)
-            geo = result['results'][0]['geometry']['location']
-            return float(geo['lat']), float(geo['lng'])
+            return result['results']
         except (KeyError, ValueError):
             _logger.debug('Unexpected Gmaps API answer %s', result.get('error_message', ''))
             return None
