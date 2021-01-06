@@ -8791,9 +8791,7 @@ $.extend( Datepicker.prototype, {
 		if ( this._isDisabledDatepicker( target[ 0 ] ) ) {
 			return;
 		}
-		this._adjustInstDate( inst, offset +
-			( period === "M" ? this._get( inst, "showCurrentAtPos" ) : 0 ), // undo positioning
-			period );
+		this._adjustInstDate( inst, offset, period );
 		this._updateDatepicker( inst );
 	},
 
