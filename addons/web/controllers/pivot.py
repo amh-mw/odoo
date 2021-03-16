@@ -1,11 +1,13 @@
-# -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from collections import deque
 import json
+from os.path import join, splitext
+
+from werkzeug.utils import secure_filename
 
 from odoo import http
-from odoo.http import request
+from odoo.http import content_disposition, request
 from odoo.tools import ustr
 from odoo.tools.misc import xlwt
 
@@ -95,9 +97,9 @@ class TableExporter(http.Controller):
                     worksheet.write(y, x, cell['value'])
             x, y = 0, y + 1
 
+        filename = secure_filename(jdata['title']) + '.xls'
         response = request.make_response(None,
-            headers=[('Content-Type', 'application/vnd.ms-excel'),
-                    ('Content-Disposition', 'attachment; filename=table.xls')],
+            headers=[('Content-Type', 'application/vnd.ms-excel'), ('Content-Disposition', content_disposition(filename))],
             cookies={'fileToken': token})
         workbook.save(response.stream)
 
