@@ -126,17 +126,18 @@ try:
     from werkzeug.middleware.proxy_fix import ProxyFix as ProxyFix_
     # 0.15 also supports port and prefix, but 0.14 only forwarded for, proto
     # and host so replicate that
-    ProxyFix = lambda app: ProxyFix_(app, x_for=1, x_proto=1, x_host=1)
+    ProxyFix = lambda app: ProxyFix_(app,
+        x_for=config['proxy_x_for'],
+        x_proto=config['proxy_x_proto'],
+        x_host=config['proxy_x_host'],
+        x_port=config['proxy_x_port'],
+        x_prefix=config['proxy_x_prefix'])
 except ImportError:
     # werkzeug < 0.15
     from werkzeug.contrib.fixers import ProxyFix
 
 def application(environ, start_response):
-    # FIXME: is checking for the presence of HTTP_X_FORWARDED_HOST really useful?
-    #        we're ignoring the user configuration, and that means we won't
-    #        support the standardised Forwarded header once werkzeug supports
-    #        it
-    if config['proxy_mode'] and 'HTTP_X_FORWARDED_HOST' in environ:
+    if config['proxy_mode']:
         return ProxyFix(application_unproxied)(environ, start_response)
     else:
         return application_unproxied(environ, start_response)
