@@ -28,6 +28,7 @@ var ListView = BasicView.extend({
         Controller: ListController,
     }),
     viewType: 'list',
+    searchMenuTypes: ['filter', 'groupBy', 'timeRange', 'favorite'],
     /**
      * @override
      *
