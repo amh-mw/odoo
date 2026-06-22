@@ -364,9 +364,19 @@ class IrHttp(models.AbstractModel):
             request.update_env(user=public_user.id)
 
     @classmethod
+    def _auth_method_scoped_header(cls, routing):
+        if not (header := routing.get('header') or not (scope := routing.get('scope'))):
+            raise werkzeug.exceptions.SecurityError()
+        if not (key := request.httprequest.headers.get(header)):
+            raise AccessDenied(f"missing header {header}")
+        if not (uid := request.env['res.users.apikeys']._check_credentials(scope=scope, key=key)):
+            raise AccessDenied(f"invalid header {header}")
+        request.update_env(user=uid)
+
+    @classmethod
     def _authenticate(cls, endpoint):
         auth = 'none' if is_cors_preflight(request, endpoint) else endpoint.routing['auth']
-        cls._authenticate_explicit(auth, check_identity=endpoint.routing.get('check_identity', True))
+        cls._authenticate_explicit(auth, check_identity=endpoint.routing.get('check_identity', True), routing=endpoint.routing)
 
     @classmethod
     def _authenticate_explicit(cls, auth, **extra):
